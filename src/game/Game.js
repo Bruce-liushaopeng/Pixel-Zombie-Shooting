@@ -33,6 +33,8 @@ export class Game {
   boot() {
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => this.resize());
+    window.visualViewport?.addEventListener('resize', () => this.resize());
     this.ui.renderOverlay(this.state, this);
     requestAnimationFrame((time) => this.loop(time));
   }
@@ -41,7 +43,13 @@ export class Game {
     const ratio = 16 / 9;
     const frame = this.canvas.closest('.canvas-frame');
     const frameWidth = frame ? frame.clientWidth - 20 : window.innerWidth - 32;
-    const width = Math.max(280, Math.min(frameWidth, 1120));
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    const isMobileLayout = window.matchMedia('(pointer: coarse), (hover: none), (max-width: 820px)').matches;
+    const isLandscape = window.innerWidth > window.innerHeight;
+    const mobileVerticalChrome = isLandscape ? 48 : 16;
+    const maxHeight = isMobileLayout ? viewportHeight - mobileVerticalChrome : Infinity;
+    const maxWidth = Math.min(frameWidth, maxHeight * ratio, 1120);
+    const width = Math.max(280, maxWidth);
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${width / ratio}px`;
   }
@@ -103,11 +111,12 @@ export class Game {
     }
 
     const mouseWorld = this.camera.screenToWorld(this.input.mouse);
-    this.player.update(dt, this.input, mouseWorld, this.world);
+    const aimWorld = this.input.aimTarget(this.player, mouseWorld);
+    this.player.update(dt, this.input, aimWorld, this.world);
     this.camera.follow(this.player, dt);
 
-    if ((this.input.mouse.down || this.input.mouse.pressed) && this.player.canShoot()) {
-      this.firePlayer(mouseWorld);
+    if ((this.input.mouse.down || this.input.mouse.pressed || this.input.isMobileShooting()) && this.player.canShoot()) {
+      this.firePlayer(aimWorld);
     }
 
     this.spawnTimer -= dt;

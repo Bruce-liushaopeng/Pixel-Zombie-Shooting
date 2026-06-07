@@ -13,14 +13,14 @@ export class Player extends Entity {
     this.hurtCooldown = 0;
   }
 
-  update(dt, input, mouseWorld, world) {
+  update(dt, input, aimWorld, world) {
     const move = input.movementVector();
     const speed = this.hasAbility('speed') ? this.speed * 1.45 : this.speed;
     this.x += move.x * speed * dt;
     this.y += move.y * speed * dt;
     resolveWorldCollisions(this, world);
 
-    this.angle = Math.atan2(mouseWorld.y - this.y, mouseWorld.x - this.x);
+    this.angle = Math.atan2(aimWorld.y - this.y, aimWorld.x - this.x);
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.hurtCooldown = Math.max(0, this.hurtCooldown - dt);
     for (const [key, value] of this.abilities.entries()) {

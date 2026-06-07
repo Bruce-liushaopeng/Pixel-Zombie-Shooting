@@ -1,9 +1,14 @@
+import { MobileControls } from './MobileControls.js';
+
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
+    this.frame = canvas.closest('.canvas-frame') || canvas.parentElement;
     this.keys = new Set();
     this.mouse = { x: 0, y: 0, down: false, pressed: false };
     this.pausePressed = false;
+    this.mobile = new MobileControls(this.frame);
+    this.lastMobileAim = { x: 1, y: 0 };
 
     window.addEventListener('keydown', (event) => {
       this.keys.add(event.key.toLowerCase());
@@ -39,8 +44,36 @@ export class Input {
     const down = this.keys.has('s') || this.keys.has('arrowdown');
     const x = Number(right) - Number(left);
     const y = Number(down) - Number(up);
+    const mobileMove = this.mobile.movementVector();
+    if (Math.hypot(mobileMove.x, mobileMove.y) > 0) return mobileMove;
     const length = Math.hypot(x, y) || 1;
     return { x: x / length, y: y / length };
+  }
+
+  aimVector() {
+    return this.mobile.aimVector();
+  }
+
+  isMobileShooting() {
+    return this.mobile.isAiming();
+  }
+
+  aimTarget(player, mouseWorld) {
+    const aim = this.aimVector();
+    if (aim.magnitude > 0) {
+      this.lastMobileAim = { x: aim.x, y: aim.y };
+      return {
+        x: player.x + aim.x * 160,
+        y: player.y + aim.y * 160,
+      };
+    }
+    if (this.mobile.enabled) {
+      return {
+        x: player.x + this.lastMobileAim.x * 160,
+        y: player.y + this.lastMobileAim.y * 160,
+      };
+    }
+    return mouseWorld;
   }
 
   consumeFrameFlags() {

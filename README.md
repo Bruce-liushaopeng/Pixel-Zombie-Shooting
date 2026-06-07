@@ -11,12 +11,22 @@ npm run dev
 
 Open the local URL Vite prints in your terminal.
 
-## Controls
+## Desktop controls
 
 - `WASD` or arrow keys: move
 - Mouse: aim
 - Left click: shoot
 - `P` or `Esc`: pause/resume
+
+## Mobile controls
+
+Pixel Outbreak Survivor supports touch twin-stick controls on phones, tablets, and small touch screens. Mobile play is intended for horizontal/landscape orientation.
+
+- Left virtual joystick: move the player
+- Right virtual joystick: aim
+- Hold or move the right virtual joystick: shoot continuously at the current fire rate
+- Release the right virtual joystick: stop shooting while keeping the last aim direction
+- Both joysticks support multi-touch, so you can move and shoot at the same time
 
 ## Features
 
@@ -25,6 +35,7 @@ Open the local URL Vite prints in your terminal.
 - Camera-following city/block map larger than the viewport
 - Procedural buildings, roads, crates, cars, barrels, fences, floor cracks, grass, and shadows
 - Player movement, mouse aiming, shooting, collision, health, score, and wave progression
+- Mobile twin-stick movement, aiming, and auto-fire controls
 - Two enemy types:
   - Zombie: slow chaser with contact damage
   - Rival survivor: keeps range and fires back
