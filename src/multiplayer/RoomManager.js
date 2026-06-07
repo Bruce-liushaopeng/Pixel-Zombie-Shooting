@@ -33,7 +33,7 @@ export class RoomManager {
     return localStorage.getItem(PLAYER_NAME_KEY) || '';
   }
 
-  async joinOrCreateRoom({ roomCode, playerName }) {
+  async joinOrCreateRoom({ roomCode, playerName, mode = 'coop', difficulty = 'medium' }) {
     if (!this.supabase) throw new Error('Missing Supabase env vars.');
 
     const cleanCode = normalizeRoomCode(roomCode);
@@ -44,7 +44,7 @@ export class RoomManager {
     const existingRoom = await this.findRoom(cleanCode);
     return existingRoom
       ? this.joinExistingRoom(existingRoom, cleanName)
-      : this.createRoom(cleanCode, cleanName);
+      : this.createRoom(cleanCode, cleanName, mode, difficulty);
   }
 
   async findRoom(roomCode) {
@@ -57,7 +57,7 @@ export class RoomManager {
     return data;
   }
 
-  async createRoom(roomCode, playerName) {
+  async createRoom(roomCode, playerName, mode, difficulty) {
     const now = new Date().toISOString();
     const { data: room, error: roomError } = await this.supabase
       .from('rooms')
@@ -67,7 +67,12 @@ export class RoomManager {
         host_player_id: this.playerId,
         max_players: 2,
         current_wave: 1,
-        game_state: {},
+        game_state: {
+          mode,
+          difficulty,
+          currentWave: 1,
+          seed: crypto.randomUUID(),
+        },
         created_at: now,
         updated_at: now,
       })

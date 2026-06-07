@@ -9,6 +9,9 @@ export class UI {
     this.onMultiplayer = () => {};
     this.onJoinRoom = () => {};
     this.onLeaveRoom = () => {};
+    this.onOpenShop = () => {};
+    this.onCloseShop = () => {};
+    this.onBuyWeapon = () => {};
     this.onRestart = () => {};
     this.onResume = () => {};
   }
@@ -31,8 +34,13 @@ export class UI {
       <div class="hud-row">
         <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
         <div class="stat">Score <b>${game.score}</b></div>
+        <div class="stat">Money <b>$${game.money}</b></div>
+        <div class="stat">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
         <div class="stat">Wave <b>${game.wave}</b></div>
+        <div class="stat">Zombies <b>${game.zombiesRemaining?.() ?? game.enemies.length}</b></div>
+        <div class="stat">${game.modeLabel?.() || 'Single'} / ${game.difficultyLabel?.() || 'Medium'}</div>
         <div class="cooldown"><span style="transform:scaleX(${cooldown})"></span><p>Fire</p></div>
+        <button class="hud-button" type="button" data-action="shop">Shop</button>
         ${game.isMultiplayer?.() ? '<button class="hud-button" type="button" data-action="leave-room">Leave</button>' : ''}
       </div>
       <div class="ability-row">${abilityTags || '<span class="empty-abilities">No active abilities</span>'}</div>
@@ -42,6 +50,8 @@ export class UI {
       this.hud.innerHTML = markup;
       const leaveButton = this.hud.querySelector('[data-action="leave-room"]');
       if (leaveButton) leaveButton.onclick = () => this.onLeaveRoom();
+      const shopButton = this.hud.querySelector('[data-action="shop"]');
+      if (shopButton) shopButton.onclick = () => this.onOpenShop();
       this.lastHud = markup;
     }
   }
@@ -54,7 +64,8 @@ export class UI {
         const remote = game.multiplayer.remotePlayers.get(player.player_id);
         const health = isLocal ? game.player.health : remote?.health ?? player.health ?? 100;
         const score = isLocal ? game.score : remote?.score ?? player.score ?? 0;
-        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Score ${score}</span>`;
+        const money = isLocal ? game.money : remote?.money ?? 0;
+        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Score ${score} $${money}</span>`;
       })
       .join('');
     return `<div class="multiplayer-hud">${rows}<span class="connection-copy">${game.multiplayer.statusMessage || 'Connected'}</span></div>`;
@@ -80,7 +91,7 @@ export class UI {
       },
       [GAME_STATE.GAME_OVER]: {
         title: 'Run Ended',
-        body: `Final score ${game.score}. You reached wave ${game.wave}.`,
+        body: game.gameOverSummary?.() || game.endMessage || `Final score ${game.score}. You reached wave ${game.wave}.`,
         button: 'Restart',
       },
     }[state];
@@ -113,23 +124,29 @@ export class UI {
         <h1>${copy.title}</h1>
         <p>${copy.body}</p>
         <div class="menu-actions">
+          ${this.renderDifficultySelector('medium')}
           <button class="pixel-button" type="button" data-action="single-player">Single Player</button>
-          <button class="pixel-button secondary" type="button" data-action="multiplayer">Multiplayer</button>
+          <button class="pixel-button secondary" type="button" data-action="coop">Multiplayer Co-op</button>
+          <button class="pixel-button secondary" type="button" data-action="pvp">Multiplayer PvP</button>
         </div>
       </div>
     `;
-    this.overlay.querySelector('[data-action="single-player"]').onclick = () => this.onStart();
-    this.overlay.querySelector('[data-action="multiplayer"]').onclick = () => this.onMultiplayer();
+    const selectedDifficulty = () => this.overlay.querySelector('input[name="difficulty"]:checked')?.value || 'medium';
+    this.overlay.querySelector('[data-action="single-player"]').onclick = () => this.onStart({ difficulty: selectedDifficulty() });
+    this.overlay.querySelector('[data-action="coop"]').onclick = () => this.onMultiplayer({ mode: 'coop', difficulty: selectedDifficulty() });
+    this.overlay.querySelector('[data-action="pvp"]').onclick = () => this.onMultiplayer({ mode: 'pvp', difficulty: selectedDifficulty() });
   }
 
-  renderMultiplayerMenu({ playerName = '', roomCode = '', error = '', status = '' } = {}) {
+  renderMultiplayerMenu({ playerName = '', roomCode = '', mode = 'coop', difficulty = 'medium', error = '', status = '' } = {}) {
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
       <div class="menu multiplayer-menu">
         <p class="eyebrow">Supabase realtime</p>
-        <h1>Multiplayer</h1>
-        <p>Join or create a two-player room. The first player hosts shared waves and zombie state.</p>
+        <h1>${mode === 'pvp' ? 'PvP Room' : 'Co-op Room'}</h1>
+        <p>Join or create a two-player room. Mode: ${this.escape(mode.toUpperCase())}. Difficulty: ${this.escape(difficulty)}.</p>
         <form class="multiplayer-form">
+          <input type="hidden" name="mode" value="${this.escape(mode)}" />
+          <input type="hidden" name="difficulty" value="${this.escape(difficulty)}" />
           <label>
             <span>Player name</span>
             <input name="playerName" maxlength="18" autocomplete="nickname" value="${this.escape(playerName)}" placeholder="Survivor" />
@@ -154,6 +171,8 @@ export class UI {
       this.onJoinRoom({
         playerName: data.get('playerName'),
         roomCode: data.get('roomCode'),
+        mode: data.get('mode'),
+        difficulty: data.get('difficulty'),
       });
     };
     this.overlay.querySelector('[data-action="back"]').onclick = () => this.renderOverlay(GAME_STATE.START, { score: 0, wave: 0 });
@@ -167,6 +186,7 @@ export class UI {
       <div class="menu multiplayer-menu">
         <p class="eyebrow">Waiting room</p>
         <h1>${this.escape(room.room_code)}</h1>
+        <p class="status-copy">Mode ${this.escape(room.game_state?.mode || 'coop')} / ${this.escape(room.game_state?.difficulty || 'medium')}</p>
         <div class="room-list">
           <div class="room-player player-1"><b>Player 1</b><span>${this.escape(player1?.player_name || 'Open')}</span></div>
           <div class="room-player player-2"><b>Player 2</b><span>${this.escape(player2?.player_name || 'Waiting for second player...')}</span></div>
@@ -177,6 +197,55 @@ export class UI {
       </div>
     `;
     this.overlay.querySelector('[data-action="leave-room"]').onclick = () => this.onLeaveRoom();
+  }
+
+  renderShop(game, message = '') {
+    const weapons = game.weaponManager.list();
+    this.overlay.classList.add('is-visible');
+    this.overlay.innerHTML = `
+      <div class="menu shop-menu">
+        <p class="eyebrow">${game.isMultiplayer?.() ? 'Game continues while shopping' : 'Paused shop'}</p>
+        <h1>Weapon Shop</h1>
+        <p>Weapons cost money only. Current money: $${game.money}. Score is never spent.</p>
+        <div class="shop-grid">
+          ${weapons.map((weapon) => `
+            <article class="weapon-card ${weapon.equipped ? 'is-equipped' : ''}">
+              <h2>${this.escape(weapon.name)}</h2>
+              <p>${this.escape(weapon.description)}</p>
+              <dl>
+                <div><dt>Price</dt><dd>${weapon.price}</dd></div>
+                <div><dt>Damage</dt><dd>${weapon.damage}${weapon.pellets > 1 ? ` x${weapon.pellets}` : ''}</dd></div>
+                <div><dt>Fire</dt><dd>${Math.round(1000 / weapon.fireDelay)}/s</dd></div>
+                <div><dt>Ammo</dt><dd>${weapon.purchaseAmmo === Infinity ? '∞' : weapon.purchaseAmmo}</dd></div>
+              </dl>
+              <p class="ammo-copy">Owned: ${weapon.ownedAmmo === Infinity ? '∞' : weapon.ownedAmmo}</p>
+              <button class="pixel-button ${game.money < weapon.price ? 'secondary' : ''}" type="button" data-weapon="${weapon.id}">
+                ${weapon.equipped ? 'Refill / Buy' : 'Buy / Equip'}
+              </button>
+            </article>
+          `).join('')}
+        </div>
+        ${message ? `<p class="${message.includes('Not enough') ? 'error-copy' : 'status-copy'}">${this.escape(message)}</p>` : ''}
+        <button class="pixel-button secondary" type="button" data-action="close-shop">Close</button>
+      </div>
+    `;
+    this.overlay.querySelectorAll('[data-weapon]').forEach((button) => {
+      button.onclick = () => this.onBuyWeapon(button.dataset.weapon);
+    });
+    this.overlay.querySelector('[data-action="close-shop"]').onclick = () => this.onCloseShop();
+  }
+
+  renderDifficultySelector(selected) {
+    return `
+      <div class="difficulty-selector" role="radiogroup" aria-label="Difficulty">
+        ${['easy', 'medium', 'hard'].map((id) => `
+          <label>
+            <input type="radio" name="difficulty" value="${id}" ${id === selected ? 'checked' : ''} />
+            <span>${id[0].toUpperCase()}${id.slice(1)}</span>
+          </label>
+        `).join('')}
+      </div>
+    `;
   }
 
   escape(value) {

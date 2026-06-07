@@ -17,6 +17,10 @@ import { MultiplayerState } from '../multiplayer/MultiplayerState.js';
 import { NETWORK_EVENTS, nowPayload } from '../multiplayer/NetworkEvents.js';
 import { RealtimeManager } from '../multiplayer/RealtimeManager.js';
 import { RoomManager } from '../multiplayer/RoomManager.js';
+import { getDifficulty } from './DifficultyManager.js';
+import { getGameMode, getModeFromRoomMode } from './GameModeManager.js';
+import { WeaponManager } from './WeaponManager.js';
+import { getWeapon } from '../entities/WeaponTypes.js';
 
 export class Game {
   constructor({ canvas, hud, overlay }) {
@@ -26,17 +30,24 @@ export class Game {
     this.input = new Input(canvas);
     this.audio = new AudioSystem();
     this.ui = new UI(hud, overlay);
-    this.ui.onStart = () => this.start();
-    this.ui.onMultiplayer = () => this.showMultiplayerMenu();
+    this.ui.onStart = (options) => this.start(options);
+    this.ui.onMultiplayer = (options) => this.showMultiplayerMenu(options);
     this.ui.onJoinRoom = (form) => this.joinMultiplayer(form);
     this.ui.onLeaveRoom = () => this.leaveRoom();
+    this.ui.onOpenShop = () => this.openShop();
+    this.ui.onCloseShop = () => this.closeShop();
+    this.ui.onBuyWeapon = (weaponId) => this.buyWeapon(weaponId);
     this.ui.onRestart = () => this.start();
     this.ui.onResume = () => this.setState(GAME_STATE.PLAYING);
     this.roomManager = new RoomManager(supabase);
     this.realtime = new RealtimeManager(supabase);
     this.multiplayer = new MultiplayerState();
     this.mode = 'single';
+    this.roomMode = 'single_player';
+    this.difficultyId = 'medium';
     this.multiplayerResultSaved = false;
+    this.shopOpen = false;
+    this.endMessage = '';
     this.state = GAME_STATE.START;
     this.lastTime = 0;
     this.frame = 0;
@@ -78,15 +89,22 @@ export class Game {
     this.particles = [];
     this.floaters = [];
     this.score = 0;
+    this.money = 0;
+    this.zombiesKilled = 0;
+    this.weaponPurchases = 0;
     this.wave = 0;
     this.spawnQueue = 0;
     this.spawnTimer = 0;
+    this.weaponManager = new WeaponManager();
+    this.shopOpen = false;
     this.multiplayerResultSaved = false;
     if (startWave) this.nextWave();
   }
 
-  start() {
+  start({ difficulty = 'medium' } = {}) {
     this.mode = 'single';
+    this.roomMode = 'single_player';
+    this.difficultyId = difficulty;
     this.realtime.unsubscribe();
     this.multiplayer.reset();
     this.audio.resume();
@@ -98,24 +116,30 @@ export class Game {
     return this.mode === 'multiplayer' && this.multiplayer.active;
   }
 
-  showMultiplayerMenu(error = '') {
+  showMultiplayerMenu({ mode = 'coop', difficulty = 'medium', error = '' } = {}) {
     this.mode = 'multiplayer';
+    this.roomMode = mode;
+    this.difficultyId = difficulty;
     this.ui.renderMultiplayerMenu({
       playerName: this.roomManager.storedName(),
+      mode,
+      difficulty,
       error: this.roomManager.hasClient() ? error : 'Missing Supabase env vars.',
     });
   }
 
-  async joinMultiplayer({ playerName, roomCode }) {
+  async joinMultiplayer({ playerName, roomCode, mode = this.roomMode, difficulty = this.difficultyId }) {
     try {
-      this.ui.renderMultiplayerMenu({ playerName, roomCode, status: 'Connecting...' });
-      const session = await this.roomManager.joinOrCreateRoom({ playerName, roomCode });
+      this.ui.renderMultiplayerMenu({ playerName, roomCode, mode, difficulty, status: 'Connecting...' });
+      const session = await this.roomManager.joinOrCreateRoom({ playerName, roomCode, mode, difficulty });
       this.multiplayer.configure(session);
+      this.roomMode = this.multiplayer.roomMode;
+      this.difficultyId = this.multiplayer.difficulty;
       this.subscribeToRoom(session.room.id);
       if (session.room.status === 'playing' || this.multiplayer.connectedPlayers().length >= 2) this.startMultiplayerGame();
       else this.renderWaitingRoom();
     } catch (error) {
-      this.showMultiplayerMenu(error.message || 'Failed to join room.');
+      this.showMultiplayerMenu({ mode, difficulty, error: error.message || 'Failed to join room.' });
     }
   }
 
@@ -169,6 +193,8 @@ export class Game {
 
   handleRoomChange(room) {
     this.multiplayer.applyRoom(room);
+    this.roomMode = this.multiplayer.roomMode;
+    this.difficultyId = this.multiplayer.difficulty;
     this.wave = room?.current_wave || this.wave;
     if (room?.status === 'playing' && this.state !== GAME_STATE.PLAYING) this.startMultiplayerGame();
     if (room?.status === 'ended' && this.state === GAME_STATE.PLAYING) this.setState(GAME_STATE.GAME_OVER);
@@ -184,6 +210,8 @@ export class Game {
 
   startMultiplayerGame() {
     this.audio.resume();
+    this.roomMode = this.multiplayer.roomMode;
+    this.difficultyId = this.multiplayer.difficulty;
     this.reset({ startWave: this.multiplayer.isHost });
     this.player.x = WORLD.width / 2 + (this.multiplayer.localSlot === 1 ? -44 : 44);
     this.player.y = WORLD.height / 2;
@@ -211,12 +239,86 @@ export class Game {
     this.ui.renderOverlay(state, this);
   }
 
+  difficulty() {
+    return getDifficulty(this.difficultyId);
+  }
+
+  difficultyLabel() {
+    return this.difficulty().label;
+  }
+
+  modeLabel() {
+    return this.isMultiplayer()
+      ? getModeFromRoomMode(this.roomMode).label
+      : getGameMode('single').label;
+  }
+
+  gameOverSummary() {
+    const result = this.endMessage ? `${this.endMessage} ` : '';
+    return `${result}Final Score ${this.score}. Money Remaining $${this.money}. Zombies Killed ${this.zombiesKilled}. Waves Survived ${this.wave}. Weapon Purchases ${this.weaponPurchases}.`;
+  }
+
+  weaponAmmoLabel() {
+    const ammo = this.weaponManager.currentAmmo();
+    return ammo === Infinity ? '∞' : String(ammo);
+  }
+
+  zombiesRemaining() {
+    return this.enemies.length + Math.max(0, this.spawnQueue);
+  }
+
+  award({ score = 0, money = 0, label = '' }) {
+    this.score += score;
+    this.money += money;
+    if (label && (score || money)) {
+      const moneyText = money ? ` $${money}` : '';
+      this.addFloatingText(`${label}${score ? ` +${score}` : ''}${moneyText}`, this.player.x, this.player.y - 48, '#ffd166');
+    }
+    this.broadcastEconomy();
+  }
+
+  broadcastEconomy() {
+    if (!this.isMultiplayer()) return;
+    this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.SYNC_STATE, nowPayload({
+      playerEconomy: {
+        playerId: this.multiplayer.localPlayerId,
+        score: this.score,
+        money: this.money,
+        weapon: this.weaponManager.current().id,
+        ammo: this.weaponAmmoLabel(),
+        weaponPurchases: this.weaponPurchases,
+      },
+    }));
+  }
+
+  openShop(message = '') {
+    this.shopOpen = true;
+    if (!this.isMultiplayer()) this.state = GAME_STATE.PAUSED;
+    this.ui.renderShop(this, message);
+  }
+
+  closeShop() {
+    this.shopOpen = false;
+    this.setState(GAME_STATE.PLAYING);
+  }
+
+  buyWeapon(weaponId) {
+    const result = this.weaponManager.buy(weaponId, this.money);
+    if (result.ok) {
+      this.money -= result.cost;
+      this.weaponPurchases += 1;
+      this.broadcastEconomy();
+    }
+    this.ui.renderShop(this, result.message);
+  }
+
   loop(time) {
     const dt = Math.min(0.033, (time - this.lastTime) / 1000 || 0);
     this.lastTime = time;
     if (this.input.pausePressed && this.state !== GAME_STATE.START && this.state !== GAME_STATE.GAME_OVER) {
       this.setState(this.state === GAME_STATE.PLAYING ? GAME_STATE.PAUSED : GAME_STATE.PLAYING);
     }
+    if (this.input.shopPressed && this.state === GAME_STATE.PLAYING) this.openShop();
     if (this.state === GAME_STATE.PLAYING) this.update(dt);
     this.draw();
     this.ui.renderHud(this);
@@ -236,6 +338,7 @@ export class Game {
         pickups: this.pickups.length,
         wave: this.wave,
         spawnQueue: this.spawnQueue,
+        zombiesRemaining: this.zombiesRemaining(),
         multiplayer: this.isMultiplayer()
           ? {
               isHost: this.multiplayer.isHost,
@@ -246,6 +349,7 @@ export class Game {
                 targetX: Math.round(player.targetX),
                 targetY: Math.round(player.targetY),
               })),
+              mode: this.roomMode,
             }
           : null,
       };
@@ -266,7 +370,7 @@ export class Game {
       if (this.spawnQueue > 0 && this.spawnTimer <= 0) {
         this.spawnEnemy();
         this.spawnQueue -= 1;
-        this.spawnTimer = Math.max(0.18, 0.72 - this.wave * 0.035);
+        this.spawnTimer = Math.max(0.16, 0.72 - this.wave * 0.035 * this.difficulty().waveScale);
       }
       if (this.spawnQueue <= 0 && this.enemies.length === 0) this.nextWave();
     }
@@ -287,38 +391,38 @@ export class Game {
   }
 
   firePlayer(mouseWorld) {
-    this.player.markShot();
-    const specs = [this.player.bulletSpec(mouseWorld)];
-    if (this.player.hasAbility('spread')) {
-      const base = Math.atan2(mouseWorld.y - this.player.y, mouseWorld.x - this.player.x);
-      for (const angle of [base - 0.22, base + 0.22]) {
-        specs.push({
-          x: this.player.x + Math.cos(angle) * 24,
-          y: this.player.y + Math.sin(angle) * 24,
-          vx: Math.cos(angle) * 660,
-          vy: Math.sin(angle) * 660,
-          r: this.player.hasAbility('big') ? 7 : 4,
-          damage: this.player.hasAbility('damage') ? 22 : 13,
-          friendly: true,
-        });
-      }
+    const weapon = this.weaponManager.current();
+    if (!this.weaponManager.canShoot()) return;
+    this.player.markShot(weapon);
+    const specs = [];
+    const pellets = this.player.hasAbility('spread') ? Math.max(weapon.pellets, 3) : weapon.pellets;
+    const spread = this.player.hasAbility('spread') ? Math.max(weapon.spread, 0.44) : weapon.spread;
+    for (let i = 0; i < pellets; i++) {
+      const offset = pellets === 1 ? 0 : -spread / 2 + (spread / (pellets - 1)) * i;
+      specs.push({
+        ...this.player.bulletSpec(mouseWorld, weapon, offset),
+        ownerId: this.isMultiplayer() ? this.multiplayer.localPlayerId : null,
+      });
     }
+    this.weaponManager.consumeAmmo();
     specs.forEach((spec) => this.spawnBullet(spec));
     this.camera.addShake(3.5, 0.1);
     this.audio.shoot();
-    if (this.isMultiplayer()) this.sendShootEvent(mouseWorld);
+    if (this.isMultiplayer()) this.sendShootEvent(mouseWorld, weapon);
   }
 
   spawnBullet(spec) {
     this.bullets.push(new Bullet(spec));
   }
 
-  sendShootEvent(aimWorld) {
+  sendShootEvent(aimWorld, weapon) {
     const angle = Math.atan2(aimWorld.y - this.player.y, aimWorld.x - this.player.x);
     this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PLAYER_SHOOT, nowPayload({
       x: this.player.x,
       y: this.player.y,
       angle,
+      weaponType: weapon.id,
+      damage: weapon.damage,
       bulletId: crypto.randomUUID(),
     }));
   }
@@ -326,24 +430,58 @@ export class Game {
   spawnRemoteShot(event) {
     if (event.player_id === this.multiplayer.localPlayerId) return;
     const payload = event.payload || {};
+    const weapon = getWeapon(payload.weaponType || 'pistol');
     const dir = { x: Math.cos(payload.angle || 0), y: Math.sin(payload.angle || 0) };
-    this.spawnBullet({
-      x: Number(payload.x) + dir.x * 24,
-      y: Number(payload.y) + dir.y * 24,
-      vx: dir.x * 720,
-      vy: dir.y * 720,
-      r: 5,
-      damage: 16,
-      friendly: true,
-      ownerId: event.player_id,
-      bulletId: payload.bulletId,
-    });
+    for (let i = 0; i < weapon.pellets; i++) {
+      const offset = weapon.pellets === 1 ? 0 : -weapon.spread / 2 + (weapon.spread / (weapon.pellets - 1)) * i;
+      const angle = (payload.angle || 0) + offset;
+      this.spawnBullet({
+        x: Number(payload.x) + dir.x * 24,
+        y: Number(payload.y) + dir.y * 24,
+        vx: Math.cos(angle) * weapon.speed,
+        vy: Math.sin(angle) * weapon.speed,
+        r: weapon.radius || 5,
+        damage: weapon.damage,
+        friendly: true,
+        ownerId: event.player_id,
+        bulletId: payload.bulletId,
+        weaponType: weapon.id,
+        color: weapon.color,
+        area: weapon.area || 0,
+      });
+    }
   }
 
   handleNetworkEvent(event) {
     if (!this.isMultiplayer() || !this.multiplayer.markEventSeen(event.id)) return;
     if (event.event_type === NETWORK_EVENTS.PLAYER_SHOOT) this.spawnRemoteShot(event);
-    if (event.event_type === NETWORK_EVENTS.SYNC_STATE && !this.multiplayer.isHost) this.applySyncState(event.payload);
+    if (event.event_type === NETWORK_EVENTS.PLAYER_HIT && event.player_id !== this.multiplayer.localPlayerId) {
+      const payload = event.payload || {};
+      if (payload.shooterPlayerId === this.multiplayer.localPlayerId) {
+        this.award({ score: 5, money: 2, label: 'PvP hit' });
+        this.addFloatingText('+5 hit', this.player.x, this.player.y - 42, '#ffd166');
+      }
+      if (payload.targetPlayerId === this.multiplayer.localPlayerId) {
+        this.multiplayer.statusMessage = `Hit by ${payload.weaponType || 'weapon'} for ${payload.damage}.`;
+      }
+    }
+    if (event.event_type === NETWORK_EVENTS.PLAYER_DIED) {
+      const payload = event.payload || {};
+      this.endMessage = payload.winnerPlayerId === this.multiplayer.localPlayerId ? 'You win!' : 'You lose.';
+      if (payload.winnerPlayerId === this.multiplayer.localPlayerId) {
+        this.award({ score: 100, money: 50, label: 'Win' });
+        this.saveMultiplayerResult(true);
+      }
+      this.setState(GAME_STATE.GAME_OVER);
+    }
+    if (event.event_type === NETWORK_EVENTS.WAVE_STARTED && event.player_id !== this.multiplayer.localPlayerId) {
+      const payload = event.payload || {};
+      if (payload.completedWave) this.award({ score: 50, money: 30, label: 'Wave clear' });
+    }
+    if (event.event_type === NETWORK_EVENTS.SYNC_STATE) {
+      if (event.payload?.playerEconomy) this.applySyncState(event.payload);
+      else if (!this.multiplayer.isHost) this.applySyncState(event.payload);
+    }
     if (event.event_type === NETWORK_EVENTS.PLAYER_LEFT && event.player_id !== this.multiplayer.localPlayerId) {
       this.multiplayer.statusMessage = 'Other player disconnected.';
     }
@@ -383,10 +521,16 @@ export class Game {
   serializeSharedState() {
     return {
       wave: this.wave,
+      mode: this.roomMode,
+      difficulty: this.difficultyId,
       spawnQueue: this.spawnQueue,
       enemies: this.enemies.map((enemy) => ({
         id: enemy.id,
         kind: enemy.kind,
+        typeId: enemy.typeId,
+        reward: enemy.reward,
+        moneyReward: enemy.moneyReward,
+        attackDamage: enemy.attackDamage,
         x: enemy.x,
         y: enemy.y,
         angle: enemy.angle || 0,
@@ -405,12 +549,24 @@ export class Game {
   }
 
   applySyncState(payload = {}) {
+    if (payload.playerEconomy) {
+      this.multiplayer.applyEconomy?.(payload.playerEconomy);
+      return;
+    }
     this.wave = payload.wave || this.wave;
+    this.roomMode = payload.mode || this.roomMode;
+    this.difficultyId = payload.difficulty || this.difficultyId;
     this.spawnQueue = payload.spawnQueue || 0;
     this.enemies = (payload.enemies || []).map((data) => {
       const existing = this.enemies.find((enemy) => enemy.id === data.id);
-      const enemy = existing || (data.kind === 'rival' ? new Rival(data.x, data.y, this.wave) : new Zombie(data.x, data.y, this.wave));
+      const enemy = existing || (data.kind === 'rival'
+        ? new Rival(data.x, data.y, this.wave, data.typeId, this.difficulty())
+        : new Zombie(data.x, data.y, this.wave, data.typeId, this.difficulty()));
       enemy.id = data.id;
+      enemy.typeId = data.typeId || enemy.typeId;
+      enemy.reward = Number(data.reward || enemy.reward);
+      enemy.moneyReward = Number(data.moneyReward || enemy.moneyReward);
+      enemy.attackDamage = Number(data.attackDamage || enemy.attackDamage);
       enemy.x = Number(data.x);
       enemy.y = Number(data.y);
       enemy.angle = Number(data.angle || enemy.angle || 0);
@@ -453,14 +609,41 @@ export class Game {
       tries += 1;
     } while ((distance({ x, y }, this.player) < 520 || isBlocked(x, y, radius, this.world)) && tries < 80);
 
-    const enemy = chance(0.18 + this.wave * 0.015) ? new Rival(x, y, this.wave) : new Zombie(x, y, this.wave);
+    const typeId = this.chooseZombieType();
+    const enemy = ['spitter', 'boss'].includes(typeId)
+      ? new Rival(x, y, this.wave, typeId, this.difficulty())
+      : new Zombie(x, y, this.wave, typeId, this.difficulty());
     enemy.id = crypto.randomUUID();
     this.enemies.push(enemy);
   }
 
+  chooseZombieType() {
+    const difficulty = this.difficulty();
+    if (this.wave > 0 && this.wave % difficulty.bossEvery === 0 && chance(this.difficultyId === 'hard' ? 0.75 : 0.5)) return 'boss';
+    if (this.wave < difficulty.specialWave) return 'normal';
+    const roll = Math.random();
+    if (this.difficultyId === 'hard') {
+      if (roll < 0.22) return 'fast';
+      if (roll < 0.38) return 'tank';
+      if (roll < 0.56) return 'spitter';
+      if (roll < 0.7) return 'exploder';
+    } else if (this.difficultyId === 'easy') {
+      if (roll < 0.12) return 'fast';
+      if (roll < 0.2) return 'spitter';
+      if (roll < 0.26) return 'tank';
+    } else {
+      if (roll < 0.18) return 'fast';
+      if (roll < 0.3) return 'spitter';
+      if (roll < 0.4) return 'tank';
+      if (roll < 0.48) return 'exploder';
+    }
+    return 'normal';
+  }
+
   nextWave() {
+    if (this.wave > 0) this.award({ score: 50, money: 30, label: 'Wave clear' });
     this.wave += 1;
-    this.spawnQueue = 5 + this.wave * 3;
+    this.spawnQueue = Math.max(3, Math.round((5 + this.wave * 3 * this.difficulty().waveScale) * this.difficulty().spawnMultiplier));
     this.spawnTimer = 0.8;
     this.addFloatingText(`Wave ${this.wave}`, this.player.x, this.player.y - 60, '#ffd166');
     if (this.wave > 1) this.pickups.push(this.createSafePickup());
@@ -468,7 +651,10 @@ export class Game {
       this.roomManager.updateRoom(this.multiplayer.room.id, { current_wave: this.wave }).catch((error) => {
         this.multiplayer.statusMessage = error.message;
       });
-      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.WAVE_STARTED, nowPayload({ wave: this.wave }));
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.WAVE_STARTED, nowPayload({
+        wave: this.wave,
+        completedWave: this.wave > 1 ? this.wave - 1 : 0,
+      }));
     }
   }
 
@@ -489,6 +675,13 @@ export class Game {
   handleHits() {
     for (const bullet of this.bullets) {
       if (bullet.dead) continue;
+      if (this.isPvp() && bullet.friendly && bullet.ownerId && bullet.ownerId !== this.multiplayer.localPlayerId) {
+        if (distance(bullet, this.player) < bullet.r + this.player.r) {
+          bullet.dead = true;
+          this.applyPvpHit(bullet);
+          continue;
+        }
+      }
       if (bullet.friendly) {
         for (const enemy of this.enemies) {
           if (enemy.dead || distance(bullet, enemy) > bullet.r + enemy.r) continue;
@@ -538,20 +731,54 @@ export class Game {
     }
   }
 
+  isPvp() {
+    return this.isMultiplayer() && this.roomMode === 'pvp';
+  }
+
+  applyPvpHit(bullet) {
+    if (!this.player.hurt(bullet.damage)) return;
+    this.camera.addShake(5, 0.12);
+    this.audio.hit();
+    this.addFloatingText(`-${bullet.damage}`, this.player.x, this.player.y - 28, '#ef476f');
+    this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PLAYER_HIT, nowPayload({
+      targetPlayerId: this.multiplayer.localPlayerId,
+      shooterPlayerId: bullet.ownerId,
+      damage: bullet.damage,
+      targetHealth: Math.max(0, Math.ceil(this.player.health)),
+      weaponType: bullet.weaponType || 'pistol',
+    }));
+    if (this.player.health <= 0) {
+      this.endMessage = 'You lose.';
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PLAYER_DIED, nowPayload({
+        loserPlayerId: this.multiplayer.localPlayerId,
+        winnerPlayerId: bullet.ownerId,
+      }));
+      this.saveMultiplayerResult(false);
+      this.setState(GAME_STATE.GAME_OVER);
+    }
+  }
+
   killEnemy(enemy, ownerId = null) {
-    this.score += enemy.kind === 'rival' ? 90 : 45;
-    if (this.isMultiplayer() && ownerId && ownerId !== this.multiplayer.localPlayerId) this.score -= enemy.kind === 'rival' ? 90 : 45;
-    if (this.isMultiplayer() && (!ownerId || ownerId === this.multiplayer.localPlayerId)) this.multiplayer.zombiesKilled += 1;
+    const reward = enemy.reward || (enemy.kind === 'rival' ? 90 : 45);
+    const moneyReward = enemy.moneyReward || Math.max(1, Math.round(reward / 2));
+    const localKill = !this.isMultiplayer() || !ownerId || ownerId === this.multiplayer.localPlayerId;
+    if (localKill) {
+      this.award({ score: reward, money: moneyReward, label: enemy.label || 'Kill' });
+      this.zombiesKilled += 1;
+    }
+    if (this.isMultiplayer() && localKill) this.multiplayer.zombiesKilled += 1;
     this.audio.enemyDown();
     this.burst(enemy.x, enemy.y, enemy.kind === 'rival' ? '#ef476f' : '#78a85d', 12);
     if (this.isMultiplayer() && this.multiplayer.isHost) {
       this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_KILLED, nowPayload({
         zombieId: enemy.id,
         killerPlayerId: ownerId || this.multiplayer.localPlayerId,
-        scoreAwarded: enemy.kind === 'rival' ? 90 : 45,
+        zombieType: enemy.typeId,
+        scoreAwarded: reward,
+        moneyAwarded: moneyReward,
       }));
     }
-    if (chance(0.18) && (!this.isMultiplayer() || this.multiplayer.isHost)) {
+    if (chance(this.difficulty().pickupChance) && (!this.isMultiplayer() || this.multiplayer.isHost)) {
       const pickup = new Pickup(enemy.x, enemy.y);
       pickup.id = crypto.randomUUID();
       this.pickups.push(pickup);
@@ -587,7 +814,10 @@ export class Game {
     });
     this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.GAME_OVER, nowPayload({
       score: this.score,
+      moneyRemaining: this.money,
       wavesSurvived: this.wave,
+      zombiesKilled: this.zombiesKilled,
+      weaponPurchases: this.weaponPurchases,
       survived,
     }));
   }

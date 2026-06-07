@@ -7,12 +7,14 @@ export class Input {
     this.keys = new Set();
     this.mouse = { x: 0, y: 0, down: false, pressed: false };
     this.pausePressed = false;
+    this.shopPressed = false;
     this.mobile = new MobileControls(this.frame);
     this.lastMobileAim = { x: 1, y: 0 };
 
     window.addEventListener('keydown', (event) => {
       this.keys.add(event.key.toLowerCase());
       if (event.key.toLowerCase() === 'p' || event.key === 'Escape') this.pausePressed = true;
+      if (event.key.toLowerCase() === 'b') this.shopPressed = true;
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.key.toLowerCase()));
 
@@ -79,5 +81,6 @@ export class Input {
   consumeFrameFlags() {
     this.mouse.pressed = false;
     this.pausePressed = false;
+    this.shopPressed = false;
   }
 }

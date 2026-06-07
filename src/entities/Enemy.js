@@ -1,12 +1,22 @@
 import { Entity } from './Entity.js';
 import { normalize, distance } from '../game/math.js';
 import { resolveWorldCollisions } from '../systems/Collision.js';
+import { getZombieType } from './ZombieTypes.js';
 
 export class Zombie extends Entity {
-  constructor(x, y, wave) {
-    super({ x, y, r: 16, health: 34 + wave * 4 });
-    this.speed = 82 + wave * 3;
+  constructor(x, y, wave, typeId = 'normal', difficulty = null) {
+    const type = getZombieType(typeId);
+    const health = Math.round((type.health + wave * 4) * (difficulty?.healthMultiplier || 1));
+    super({ x, y, r: type.radius, health });
+    this.typeId = type.id;
+    this.label = type.label;
+    this.color = type.color;
+    this.attackDamage = Math.round(type.damage * (difficulty?.damageMultiplier || 1));
+    this.reward = Math.round(type.reward * (difficulty?.scoreMultiplier || 1));
+    this.moneyReward = type.money;
+    this.speed = (82 + wave * 3) * type.speed * (difficulty?.speedMultiplier || 1);
     this.kind = 'zombie';
+    this.warnTimer = 0;
   }
 
   update(dt, game) {
@@ -16,19 +26,38 @@ export class Zombie extends Entity {
     this.x += dir.x * this.speed * dt;
     this.y += dir.y * this.speed * dt;
     resolveWorldCollisions(this, game.world);
-    if (target.isLocal && distance(this, target) < this.r + target.r && game.player.hurt(13)) {
+    if (this.typeId === 'exploder' && distance(this, target) < this.r + target.r + 24) {
+      this.warnTimer += dt;
+      if (this.warnTimer > 0.55) {
+        if (target.isLocal && distance(this, target) < this.r + target.r + 56 && game.player.hurt(this.attackDamage)) {
+          game.camera.addShake(10, 0.18);
+          game.audio.hit();
+          game.addFloatingText(`-${this.attackDamage}`, game.player.x, game.player.y - 25, '#ef476f');
+        }
+        game.burst(this.x, this.y, '#ff8c42', 16);
+        this.dead = true;
+      }
+    } else if (target.isLocal && distance(this, target) < this.r + target.r && game.player.hurt(this.attackDamage)) {
       game.camera.addShake(9, 0.22);
       game.audio.hit();
-      game.addFloatingText('-13', game.player.x, game.player.y - 25, '#ef476f');
+      game.addFloatingText(`-${this.attackDamage}`, game.player.x, game.player.y - 25, '#ef476f');
     }
     this.updateBase(dt);
   }
 }
 
 export class Rival extends Entity {
-  constructor(x, y, wave) {
-    super({ x, y, r: 17, health: 46 + wave * 5 });
-    this.speed = 120;
+  constructor(x, y, wave, typeId = 'spitter', difficulty = null) {
+    const type = getZombieType(typeId === 'rival' ? 'spitter' : typeId);
+    const health = Math.round((type.health + wave * 5) * (difficulty?.healthMultiplier || 1));
+    super({ x, y, r: type.radius, health });
+    this.typeId = type.id;
+    this.label = type.label;
+    this.color = type.color;
+    this.attackDamage = Math.round(type.damage * (difficulty?.damageMultiplier || 1));
+    this.reward = Math.round(type.reward * (difficulty?.scoreMultiplier || 1));
+    this.moneyReward = type.money;
+    this.speed = 120 * type.speed * (difficulty?.speedMultiplier || 1);
     this.kind = 'rival';
     this.shootTimer = 1 + Math.random();
     this.angle = 0;
@@ -53,9 +82,10 @@ export class Rival extends Entity {
         vx: dir.x * 440,
         vy: dir.y * 440,
         r: 5,
-        damage: 9,
+        damage: this.attackDamage,
         friendly: false,
         life: 1.8,
+        color: this.color,
       });
     }
     this.updateBase(dt);

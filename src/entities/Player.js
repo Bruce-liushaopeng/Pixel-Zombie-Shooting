@@ -35,21 +35,26 @@ export class Player extends Entity {
     return this.cooldown <= 0;
   }
 
-  markShot() {
-    this.fireDelay = this.hasAbility('rapid') ? 0.105 : 0.22;
+  markShot(weapon = null) {
+    const baseDelay = weapon?.fireDelay ?? 0.22;
+    this.fireDelay = this.hasAbility('rapid') ? Math.min(baseDelay, 0.105) : baseDelay;
     this.cooldown = this.fireDelay;
   }
 
-  bulletSpec(mouseWorld) {
-    const dir = normalize(mouseWorld.x - this.x, mouseWorld.y - this.y);
+  bulletSpec(mouseWorld, weapon = null, angleOffset = 0) {
+    const base = Math.atan2(mouseWorld.y - this.y, mouseWorld.x - this.x) + angleOffset;
+    const dir = weapon ? { x: Math.cos(base), y: Math.sin(base) } : normalize(mouseWorld.x - this.x, mouseWorld.y - this.y);
     return {
       x: this.x + dir.x * 24,
       y: this.y + dir.y * 24,
-      vx: dir.x * 720,
-      vy: dir.y * 720,
-      r: this.hasAbility('big') ? 8 : 5,
-      damage: this.hasAbility('damage') ? 28 : 16,
+      vx: dir.x * (weapon?.speed || 720),
+      vy: dir.y * (weapon?.speed || 720),
+      r: weapon?.radius || (this.hasAbility('big') ? 8 : 5),
+      damage: this.hasAbility('damage') ? Math.round((weapon?.damage || 16) * 1.75) : (weapon?.damage || 16),
       friendly: true,
+      weaponType: weapon?.id || 'pistol',
+      color: weapon?.color,
+      area: weapon?.area || 0,
     };
   }
 

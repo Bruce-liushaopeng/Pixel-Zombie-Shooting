@@ -45,17 +45,22 @@ export function drawZombie(ctx, enemy) {
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
   ctx.fillStyle = enemy.flash > 0 ? '#fff8dc' : COLORS.outline;
-  ctx.fillRect(-13, -15, 26, 30);
-  ctx.fillStyle = enemy.flash > 0 ? '#ffe66d' : '#78a85d';
-  ctx.fillRect(-9, -13, 18, 13);
+  ctx.fillRect(-enemy.r + 3, -enemy.r, enemy.r * 2 - 6, enemy.r * 2);
+  ctx.fillStyle = enemy.flash > 0 ? '#ffe66d' : enemy.color || '#78a85d';
+  ctx.fillRect(-enemy.r + 7, -enemy.r + 2, enemy.r * 2 - 14, 13);
   ctx.fillStyle = '#546a38';
-  ctx.fillRect(-11, 0, 22, 18);
+  ctx.fillRect(-enemy.r + 5, 0, enemy.r * 2 - 10, enemy.r + 2);
   ctx.fillStyle = '#2b3828';
   ctx.fillRect(-6, -9, 3, 3);
   ctx.fillRect(4, -9, 3, 3);
   ctx.fillStyle = '#8a3038';
   ctx.fillRect(-4, -2, 9, 3);
+  if (enemy.typeId === 'exploder') {
+    ctx.fillStyle = enemy.warnTimer > 0 ? '#ffd166' : '#ff8c42';
+    ctx.fillRect(-4, 7, 8, 8);
+  }
   ctx.restore();
+  drawEnemyLabel(ctx, enemy);
 }
 
 export function drawRival(ctx, enemy) {
@@ -66,18 +71,37 @@ export function drawRival(ctx, enemy) {
   ctx.fillRect(-13, -13, 26, 26);
   ctx.fillStyle = '#d99b6c';
   ctx.fillRect(-8, -13, 16, 10);
-  ctx.fillStyle = '#ef476f';
+  ctx.fillStyle = enemy.color || '#ef476f';
   ctx.fillRect(-11, -3, 22, 17);
   ctx.fillStyle = '#111820';
   ctx.fillRect(7, -4, 18, 6);
+  ctx.restore();
+  drawEnemyLabel(ctx, enemy);
+}
+
+function drawEnemyLabel(ctx, enemy) {
+  if (!enemy.label || enemy.typeId === 'normal') return;
+  ctx.save();
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.strokeStyle = COLORS.outline;
+  ctx.lineWidth = 3;
+  ctx.strokeText(enemy.label, enemy.x, enemy.y - enemy.r - 5);
+  ctx.fillStyle = enemy.color || '#fff6d1';
+  ctx.fillText(enemy.label, enemy.x, enemy.y - enemy.r - 5);
   ctx.restore();
 }
 
 export function drawBullet(ctx, bullet) {
   ctx.save();
   ctx.translate(bullet.x, bullet.y);
-  ctx.fillStyle = bullet.friendly ? COLORS.yellow : COLORS.red;
+  ctx.fillStyle = bullet.color || (bullet.friendly ? COLORS.yellow : COLORS.red);
   ctx.fillRect(-bullet.r, -bullet.r, bullet.r * 2, bullet.r * 2);
+  if (bullet.area) {
+    ctx.strokeStyle = 'rgba(255, 209, 102, 0.45)';
+    ctx.strokeRect(-bullet.r - 3, -bullet.r - 3, bullet.r * 2 + 6, bullet.r * 2 + 6);
+  }
   ctx.restore();
 }
 

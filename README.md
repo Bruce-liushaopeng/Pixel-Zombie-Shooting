@@ -39,17 +39,42 @@ Pixel Outbreak Survivor supports touch twin-stick controls on phones, tablets, a
 - Release the right virtual joystick: stop shooting while keeping the last aim direction
 - Both joysticks support multi-touch, so you can move and shoot at the same time
 
+## Game modes and difficulty
+
+Before starting, choose Easy, Medium, or Hard. Difficulty changes zombie counts, speed, health, damage, wave scaling, pickup drops, and score rewards.
+
+- Single Player: classic survival against zombie waves
+- Multiplayer Co-op: two players fight zombies together, with friendly fire disabled
+- Multiplayer PvP: two players can damage each other while zombies remain an environmental threat
+
+## Shop and weapons
+
+Press `B` or click/tap Shop during a run. In single-player the shop pauses the game; in multiplayer the game continues while shopping.
+
+Score and money are separate. Score is your final performance value and is never spent; money is the shop currency. Weapons include:
+
+- Starter Pistol: unlimited ammo
+- SMG: fast fire rate, limited ammo
+- Shotgun: spread pellets, limited ammo
+- Rifle: accurate high-damage shots, limited ammo
+- Plasma Gun: powerful glowing shots, limited ammo
+- Rocket Launcher: slow arcade area-damage shots, limited ammo
+
+When a limited-ammo weapon runs dry, the player automatically switches back to the Starter Pistol.
+
 ## Multiplayer
 
 The game includes a prototype two-player online room mode using Supabase Realtime.
 
 - Main menu: choose Single Player or Multiplayer
-- Multiplayer: enter a player name and room code, then Join / Create Room
+- Multiplayer: choose Co-op or PvP, enter a player name and room code, then Join / Create Room
 - First player creates the room and becomes host
 - Second connected player joins slot 2 and starts the match automatically
 - Host owns shared wave, zombie, and pickup sync
 - Both players send throttled position updates and immediate shooting events
 - Remote players are interpolated and drawn with different colors and name labels
+- Shot events include weapon type so different bullet styles sync across clients
+- PvP hit and player-died events are sent through `room_events`
 
 To test multiplayer:
 
@@ -71,6 +96,11 @@ This is a playable prototype using Supabase Realtime and database events. For a 
 - Player movement, mouse aiming, shooting, collision, health, score, and wave progression
 - Mobile twin-stick movement, aiming, and auto-fire controls
 - Two-player Supabase Realtime room mode with lobby, remote player sync, and host-authority shared waves
+- Easy, Medium, and Hard difficulty selection
+- Co-op and PvP multiplayer modes
+- Weapon shop with ammo-limited purchased weapons
+- Separate score and money economy, so shop spending does not reduce final score
+- Zombie variety: normal, fast, tank, spitter, exploder, and boss enemies
 - Two enemy types:
   - Zombie: slow chaser with contact damage
   - Rival survivor: keeps range and fires back

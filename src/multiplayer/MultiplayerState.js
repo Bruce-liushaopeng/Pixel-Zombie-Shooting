@@ -12,6 +12,9 @@ export class RemotePlayerState {
     this.angle = Number(row.angle || 0);
     this.health = Number(row.health ?? 100);
     this.score = Number(row.score || 0);
+    this.money = 0;
+    this.weapon = 'pistol';
+    this.ammo = '∞';
     this.r = 17;
     this.lastSeenAt = row.last_seen_at;
   }
@@ -51,6 +54,8 @@ export class MultiplayerState {
     this.players = new Map();
     this.remotePlayers = new Map();
     this.statusMessage = '';
+    this.roomMode = 'coop';
+    this.difficulty = 'medium';
     this.processedEvents = new Set();
     this.lastPlayerWrite = 0;
     this.lastSyncWrite = 0;
@@ -64,12 +69,16 @@ export class MultiplayerState {
     this.localPlayerName = player.player_name;
     this.localSlot = player.player_slot || 1;
     this.isHost = Boolean(player.is_host);
+    this.roomMode = room?.game_state?.mode || 'coop';
+    this.difficulty = room?.game_state?.difficulty || 'medium';
     this.applyPlayers(players);
   }
 
   applyRoom(room) {
     this.room = room;
     this.isHost = room?.host_player_id === this.localPlayerId;
+    this.roomMode = room?.game_state?.mode || this.roomMode;
+    this.difficulty = room?.game_state?.difficulty || this.difficulty;
   }
 
   applyPlayers(rows = []) {
@@ -111,5 +120,15 @@ export class MultiplayerState {
   updateRemotePlayers(dt) {
     this.remotePlayers.forEach((player) => player.update(dt));
   }
-}
 
+  applyEconomy({ playerId, score, money, weapon, ammo, weaponPurchases }) {
+    if (playerId === this.localPlayerId) return;
+    const remote = this.remotePlayers.get(playerId);
+    if (!remote) return;
+    remote.score = Number(score ?? remote.score);
+    remote.money = Number(money ?? remote.money);
+    remote.weapon = weapon || remote.weapon;
+    remote.ammo = ammo ?? remote.ammo;
+    remote.weaponPurchases = Number(weaponPurchases ?? remote.weaponPurchases ?? 0);
+  }
+}
