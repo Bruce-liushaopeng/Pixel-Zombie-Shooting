@@ -11,6 +11,17 @@ npm run dev
 
 Open the local URL Vite prints in your terminal.
 
+## Environment variables
+
+Multiplayer uses Supabase Realtime. Create a `.env` file with:
+
+```bash
+VITE_SUPABASE_URL=your-supabase-project-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+The project expects the existing `rooms`, `room_players`, `room_events`, and `game_results` tables to already exist in Supabase with Realtime enabled.
+
 ## Desktop controls
 
 - `WASD` or arrow keys: move
@@ -28,6 +39,29 @@ Pixel Outbreak Survivor supports touch twin-stick controls on phones, tablets, a
 - Release the right virtual joystick: stop shooting while keeping the last aim direction
 - Both joysticks support multi-touch, so you can move and shoot at the same time
 
+## Multiplayer
+
+The game includes a prototype two-player online room mode using Supabase Realtime.
+
+- Main menu: choose Single Player or Multiplayer
+- Multiplayer: enter a player name and room code, then Join / Create Room
+- First player creates the room and becomes host
+- Second connected player joins slot 2 and starts the match automatically
+- Host owns shared wave, zombie, and pickup sync
+- Both players send throttled position updates and immediate shooting events
+- Remote players are interpolated and drawn with different colors and name labels
+
+To test multiplayer:
+
+1. Start the dev server with `npm run dev`.
+2. Open the game in two browser tabs, two windows, or a desktop browser plus a phone on the same dev URL.
+3. Click Multiplayer in both clients.
+4. Enter different player names and the same room code.
+5. Join from player 1, then player 2.
+6. The lobby should show both players, then both clients should enter the match.
+
+This is a playable prototype using Supabase Realtime and database events. For a serious production action game, a dedicated authoritative WebSocket game server would be a better fit.
+
 ## Features
 
 - Canvas-rendered pixel-art survival action gameplay
@@ -36,6 +70,7 @@ Pixel Outbreak Survivor supports touch twin-stick controls on phones, tablets, a
 - Procedural buildings, roads, crates, cars, barrels, fences, floor cracks, grass, and shadows
 - Player movement, mouse aiming, shooting, collision, health, score, and wave progression
 - Mobile twin-stick movement, aiming, and auto-fire controls
+- Two-player Supabase Realtime room mode with lobby, remote player sync, and host-authority shared waves
 - Two enemy types:
   - Zombie: slow chaser with contact damage
   - Rival survivor: keeps range and fires back
@@ -74,6 +109,13 @@ src/
     math.js
   styles/
     base.css
+  lib/
+    supabaseClient.js
+  multiplayer/
+    MultiplayerState.js
+    NetworkEvents.js
+    RealtimeManager.js
+    RoomManager.js
   systems/
     Audio.js
     Collision.js

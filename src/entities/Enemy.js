@@ -10,11 +10,13 @@ export class Zombie extends Entity {
   }
 
   update(dt, game) {
-    const dir = normalize(game.player.x - this.x, game.player.y - this.y);
+    const target = game.nearestLivingPlayer(this);
+    if (!target) return;
+    const dir = normalize(target.x - this.x, target.y - this.y);
     this.x += dir.x * this.speed * dt;
     this.y += dir.y * this.speed * dt;
     resolveWorldCollisions(this, game.world);
-    if (distance(this, game.player) < this.r + game.player.r && game.player.hurt(13)) {
+    if (target.isLocal && distance(this, target) < this.r + target.r && game.player.hurt(13)) {
       game.camera.addShake(9, 0.22);
       game.audio.hit();
       game.addFloatingText('-13', game.player.x, game.player.y - 25, '#ef476f');
@@ -33,13 +35,15 @@ export class Rival extends Entity {
   }
 
   update(dt, game) {
-    const dist = distance(this, game.player);
-    const dir = normalize(game.player.x - this.x, game.player.y - this.y);
+    const target = game.nearestLivingPlayer(this);
+    if (!target) return;
+    const dist = distance(this, target);
+    const dir = normalize(target.x - this.x, target.y - this.y);
     const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
     this.x += dir.x * this.speed * desired * dt;
     this.y += dir.y * this.speed * desired * dt;
     resolveWorldCollisions(this, game.world);
-    this.angle = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+    this.angle = Math.atan2(target.y - this.y, target.x - this.x);
     this.shootTimer -= dt;
     if (this.shootTimer <= 0 && dist < 680) {
       this.shootTimer = 1.45 + Math.random() * 0.7;

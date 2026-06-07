@@ -278,6 +278,12 @@ h1 {
   box-shadow: 0 8px #9c6c27, inset 0 0 0 3px rgba(255, 255, 255, 0.32);
 }
 
+.pixel-button.secondary {
+  color: #f5f1df;
+  background: #2f3c45;
+  box-shadow: 0 6px #121a20, inset 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
 .pixel-button:active {
   transform: translateY(4px);
   box-shadow: 0 2px #9c6c27;
@@ -291,6 +297,116 @@ h1 {
   padding: 20px;
   border: 2px solid #53606b;
   background: rgba(10, 15, 19, 0.86);
+}
+
+.menu-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.multiplayer-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.multiplayer-form label {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  color: #c8d1d8;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.multiplayer-form input {
+  width: 100%;
+  min-height: 48px;
+  border: 2px solid #53606b;
+  padding: 10px 12px;
+  color: #fff6d1;
+  background: #101820;
+  font: inherit;
+  font-weight: 900;
+  outline: none;
+}
+
+.multiplayer-form input:focus {
+  border-color: #ffd166;
+}
+
+.status-copy,
+.error-copy {
+  margin-top: 16px;
+  font-weight: 800;
+}
+
+.error-copy {
+  color: #ff8c9d;
+}
+
+.room-list {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.room-player {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 2px solid #2f3c45;
+  background: rgba(10, 15, 19, 0.55);
+  text-align: left;
+}
+
+.room-player b {
+  color: #ffd166;
+}
+
+.player-1 {
+  border-color: #4cc9a7;
+}
+
+.player-2 {
+  border-color: #57b8ff;
+}
+
+.hud-button {
+  min-height: 34px;
+  border: 2px solid #111820;
+  padding: 5px 10px;
+  color: #101820;
+  background: #ffd166;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.multiplayer-hud {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.player-stat,
+.connection-copy {
+  border: 2px solid #111820;
+  padding: 5px 8px;
+  background: rgba(18, 28, 36, 0.86);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.connection-copy {
+  color: #c8d1d8;
 }
 
 .key-grid {

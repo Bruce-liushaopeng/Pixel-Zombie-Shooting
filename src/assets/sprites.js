@@ -1,14 +1,22 @@
 import { COLORS } from '../game/constants.js';
 
-export function drawPlayer(ctx, entity) {
+export function drawPlayer(ctx, entity, options = {}) {
+  const shirt = options.shirt || '#4cc9a7';
+  const glow = options.glow || null;
   ctx.save();
   ctx.translate(entity.x, entity.y);
   ctx.rotate(entity.angle);
+  if (glow) {
+    ctx.fillStyle = glow;
+    ctx.globalAlpha = 0.32;
+    ctx.fillRect(-20, -20, 40, 44);
+    ctx.globalAlpha = 1;
+  }
   ctx.fillStyle = COLORS.outline;
   ctx.fillRect(-13, -12, 28, 24);
   ctx.fillStyle = '#f5c08a';
   ctx.fillRect(-8, -14, 16, 11);
-  ctx.fillStyle = '#4cc9a7';
+  ctx.fillStyle = shirt;
   ctx.fillRect(-12, -4, 24, 18);
   ctx.fillStyle = '#26313a';
   ctx.fillRect(5, -5, 22, 7);
@@ -18,6 +26,19 @@ export function drawPlayer(ctx, entity) {
   ctx.fillRect(-12, 8, 9, 12);
   ctx.fillRect(4, 8, 9, 12);
   ctx.restore();
+
+  if (options.name) {
+    ctx.save();
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = COLORS.outline;
+    ctx.strokeText(options.name, entity.x, entity.y - 28);
+    ctx.fillStyle = options.labelColor || '#fff6d1';
+    ctx.fillText(options.name, entity.x, entity.y - 28);
+    ctx.restore();
+  }
 }
 
 export function drawZombie(ctx, enemy) {

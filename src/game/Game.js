@@ -12,6 +12,11 @@ import { AudioSystem } from '../systems/Audio.js';
 import { isBlocked } from '../systems/Collision.js';
 import { Input } from '../systems/Input.js';
 import { UI } from '../systems/UI.js';
+import { supabase } from '../lib/supabaseClient.js';
+import { MultiplayerState } from '../multiplayer/MultiplayerState.js';
+import { NETWORK_EVENTS, nowPayload } from '../multiplayer/NetworkEvents.js';
+import { RealtimeManager } from '../multiplayer/RealtimeManager.js';
+import { RoomManager } from '../multiplayer/RoomManager.js';
 
 export class Game {
   constructor({ canvas, hud, overlay }) {
@@ -22,8 +27,16 @@ export class Game {
     this.audio = new AudioSystem();
     this.ui = new UI(hud, overlay);
     this.ui.onStart = () => this.start();
+    this.ui.onMultiplayer = () => this.showMultiplayerMenu();
+    this.ui.onJoinRoom = (form) => this.joinMultiplayer(form);
+    this.ui.onLeaveRoom = () => this.leaveRoom();
     this.ui.onRestart = () => this.start();
     this.ui.onResume = () => this.setState(GAME_STATE.PLAYING);
+    this.roomManager = new RoomManager(supabase);
+    this.realtime = new RealtimeManager(supabase);
+    this.multiplayer = new MultiplayerState();
+    this.mode = 'single';
+    this.multiplayerResultSaved = false;
     this.state = GAME_STATE.START;
     this.lastTime = 0;
     this.frame = 0;
@@ -54,7 +67,7 @@ export class Game {
     this.canvas.style.height = `${width / ratio}px`;
   }
 
-  reset() {
+  reset({ startWave = true } = {}) {
     this.world = new World();
     this.camera = new Camera(this.canvas, this.world);
     this.player = new Player(WORLD.width / 2, WORLD.height / 2);
@@ -68,13 +81,129 @@ export class Game {
     this.wave = 0;
     this.spawnQueue = 0;
     this.spawnTimer = 0;
-    this.nextWave();
+    this.multiplayerResultSaved = false;
+    if (startWave) this.nextWave();
   }
 
   start() {
+    this.mode = 'single';
+    this.realtime.unsubscribe();
+    this.multiplayer.reset();
     this.audio.resume();
     this.reset();
     this.setState(GAME_STATE.PLAYING);
+  }
+
+  isMultiplayer() {
+    return this.mode === 'multiplayer' && this.multiplayer.active;
+  }
+
+  showMultiplayerMenu(error = '') {
+    this.mode = 'multiplayer';
+    this.ui.renderMultiplayerMenu({
+      playerName: this.roomManager.storedName(),
+      error: this.roomManager.hasClient() ? error : 'Missing Supabase env vars.',
+    });
+  }
+
+  async joinMultiplayer({ playerName, roomCode }) {
+    try {
+      this.ui.renderMultiplayerMenu({ playerName, roomCode, status: 'Connecting...' });
+      const session = await this.roomManager.joinOrCreateRoom({ playerName, roomCode });
+      this.multiplayer.configure(session);
+      this.subscribeToRoom(session.room.id);
+      if (session.room.status === 'playing' || this.multiplayer.connectedPlayers().length >= 2) this.startMultiplayerGame();
+      else this.renderWaitingRoom();
+    } catch (error) {
+      this.showMultiplayerMenu(error.message || 'Failed to join room.');
+    }
+  }
+
+  subscribeToRoom(roomId) {
+    this.realtime.subscribe({
+      roomId,
+      onRoom: (room) => this.handleRoomChange(room),
+      onPlayers: () => this.refreshRoomPlayers(),
+      onEvent: (event) => this.handleNetworkEvent(event),
+      onError: (message) => {
+        this.multiplayer.statusMessage = message;
+      },
+    });
+  }
+
+  async refreshRoomPlayers() {
+    if (!this.multiplayer.room) return;
+    try {
+      const previouslyConnected = new Set(
+        [...this.multiplayer.remotePlayers.values()]
+          .filter((player) => player.isConnected)
+          .map((player) => player.playerId),
+      );
+      const players = await this.roomManager.fetchPlayers(this.multiplayer.room.id);
+      this.multiplayer.applyPlayers(players);
+      const stillConnected = new Set(
+        players
+          .filter((player) => player.is_connected && player.player_id !== this.multiplayer.localPlayerId)
+          .map((player) => player.player_id),
+      );
+      if ([...previouslyConnected].some((id) => !stillConnected.has(id))) {
+        this.multiplayer.statusMessage = 'Other player disconnected.';
+      }
+      if (this.multiplayer.connectedPlayers().length >= 2 && this.state !== GAME_STATE.PLAYING) {
+        if (this.multiplayer.isHost && this.multiplayer.room?.status !== 'playing') {
+          this.roomManager.updateRoom(this.multiplayer.room.id, {
+            status: 'playing',
+            game_started_at: new Date().toISOString(),
+          }).catch((error) => {
+            this.multiplayer.statusMessage = error.message;
+          });
+        }
+        this.startMultiplayerGame();
+        return;
+      }
+      if (this.state !== GAME_STATE.PLAYING) this.renderWaitingRoom();
+    } catch (error) {
+      this.multiplayer.statusMessage = error.message;
+    }
+  }
+
+  handleRoomChange(room) {
+    this.multiplayer.applyRoom(room);
+    this.wave = room?.current_wave || this.wave;
+    if (room?.status === 'playing' && this.state !== GAME_STATE.PLAYING) this.startMultiplayerGame();
+    if (room?.status === 'ended' && this.state === GAME_STATE.PLAYING) this.setState(GAME_STATE.GAME_OVER);
+  }
+
+  renderWaitingRoom() {
+    this.ui.renderWaitingRoom({
+      room: this.multiplayer.room,
+      players: this.multiplayer.connectedPlayers(),
+      status: this.multiplayer.statusMessage,
+    });
+  }
+
+  startMultiplayerGame() {
+    this.audio.resume();
+    this.reset({ startWave: this.multiplayer.isHost });
+    this.player.x = WORLD.width / 2 + (this.multiplayer.localSlot === 1 ? -44 : 44);
+    this.player.y = WORLD.height / 2;
+    if (!this.multiplayer.isHost) {
+      this.wave = this.multiplayer.room?.current_wave || 1;
+      this.spawnQueue = 0;
+      this.pickups = [];
+    }
+    this.setState(GAME_STATE.PLAYING);
+  }
+
+  async leaveRoom() {
+    if (this.isMultiplayer()) {
+      await this.roomManager.leaveRoom(this.multiplayer.room?.id);
+      this.realtime.unsubscribe();
+    }
+    this.mode = 'single';
+    this.multiplayer.reset();
+    this.reset();
+    this.setState(GAME_STATE.START);
   }
 
   setState(state) {
@@ -107,25 +236,40 @@ export class Game {
         pickups: this.pickups.length,
         wave: this.wave,
         spawnQueue: this.spawnQueue,
+        multiplayer: this.isMultiplayer()
+          ? {
+              isHost: this.multiplayer.isHost,
+              remotes: [...this.multiplayer.remotePlayers.values()].map((player) => ({
+                id: player.playerId,
+                x: Math.round(player.x),
+                y: Math.round(player.y),
+                targetX: Math.round(player.targetX),
+                targetY: Math.round(player.targetY),
+              })),
+            }
+          : null,
       };
     }
 
     const mouseWorld = this.camera.screenToWorld(this.input.mouse);
     const aimWorld = this.input.aimTarget(this.player, mouseWorld);
     this.player.update(dt, this.input, aimWorld, this.world);
+    this.multiplayer.updateRemotePlayers(dt);
     this.camera.follow(this.player, dt);
 
     if ((this.input.mouse.down || this.input.mouse.pressed || this.input.isMobileShooting()) && this.player.canShoot()) {
       this.firePlayer(aimWorld);
     }
 
-    this.spawnTimer -= dt;
-    if (this.spawnQueue > 0 && this.spawnTimer <= 0) {
-      this.spawnEnemy();
-      this.spawnQueue -= 1;
-      this.spawnTimer = Math.max(0.18, 0.72 - this.wave * 0.035);
+    if (!this.isMultiplayer() || this.multiplayer.isHost) {
+      this.spawnTimer -= dt;
+      if (this.spawnQueue > 0 && this.spawnTimer <= 0) {
+        this.spawnEnemy();
+        this.spawnQueue -= 1;
+        this.spawnTimer = Math.max(0.18, 0.72 - this.wave * 0.035);
+      }
+      if (this.spawnQueue <= 0 && this.enemies.length === 0) this.nextWave();
     }
-    if (this.spawnQueue <= 0 && this.enemies.length === 0) this.nextWave();
 
     this.bullets.forEach((bullet) => bullet.update(dt, this.world));
     this.enemies.forEach((enemy) => enemy.update(dt, this));
@@ -134,8 +278,12 @@ export class Game {
     this.floaters.forEach((text) => text.update(dt));
     this.handleHits();
     this.cleanup();
+    this.syncMultiplayer();
 
-    if (this.player.health <= 0) this.setState(GAME_STATE.GAME_OVER);
+    if (this.player.health <= 0) {
+      this.setState(GAME_STATE.GAME_OVER);
+      this.saveMultiplayerResult(false);
+    }
   }
 
   firePlayer(mouseWorld) {
@@ -158,10 +306,137 @@ export class Game {
     specs.forEach((spec) => this.spawnBullet(spec));
     this.camera.addShake(3.5, 0.1);
     this.audio.shoot();
+    if (this.isMultiplayer()) this.sendShootEvent(mouseWorld);
   }
 
   spawnBullet(spec) {
     this.bullets.push(new Bullet(spec));
+  }
+
+  sendShootEvent(aimWorld) {
+    const angle = Math.atan2(aimWorld.y - this.player.y, aimWorld.x - this.player.x);
+    this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PLAYER_SHOOT, nowPayload({
+      x: this.player.x,
+      y: this.player.y,
+      angle,
+      bulletId: crypto.randomUUID(),
+    }));
+  }
+
+  spawnRemoteShot(event) {
+    if (event.player_id === this.multiplayer.localPlayerId) return;
+    const payload = event.payload || {};
+    const dir = { x: Math.cos(payload.angle || 0), y: Math.sin(payload.angle || 0) };
+    this.spawnBullet({
+      x: Number(payload.x) + dir.x * 24,
+      y: Number(payload.y) + dir.y * 24,
+      vx: dir.x * 720,
+      vy: dir.y * 720,
+      r: 5,
+      damage: 16,
+      friendly: true,
+      ownerId: event.player_id,
+      bulletId: payload.bulletId,
+    });
+  }
+
+  handleNetworkEvent(event) {
+    if (!this.isMultiplayer() || !this.multiplayer.markEventSeen(event.id)) return;
+    if (event.event_type === NETWORK_EVENTS.PLAYER_SHOOT) this.spawnRemoteShot(event);
+    if (event.event_type === NETWORK_EVENTS.SYNC_STATE && !this.multiplayer.isHost) this.applySyncState(event.payload);
+    if (event.event_type === NETWORK_EVENTS.PLAYER_LEFT && event.player_id !== this.multiplayer.localPlayerId) {
+      this.multiplayer.statusMessage = 'Other player disconnected.';
+    }
+    if (event.event_type === NETWORK_EVENTS.GAME_OVER && event.player_id !== this.multiplayer.localPlayerId) {
+      this.multiplayer.statusMessage = 'Room game over.';
+      this.setState(GAME_STATE.GAME_OVER);
+    }
+  }
+
+  syncMultiplayer() {
+    if (!this.isMultiplayer()) return;
+    const now = performance.now();
+    if (now - this.multiplayer.lastPlayerWrite > 75) {
+      this.multiplayer.lastPlayerWrite = now;
+      this.roomManager.updatePlayer(this.multiplayer.room.id, {
+        x: this.player.x,
+        y: this.player.y,
+        angle: this.player.angle,
+        health: Math.max(0, Math.ceil(this.player.health)),
+        score: this.score,
+      });
+    }
+
+    if (this.multiplayer.isHost && now - this.multiplayer.lastSyncWrite > 220) {
+      this.multiplayer.lastSyncWrite = now;
+      const gameState = this.serializeSharedState();
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.SYNC_STATE, nowPayload(gameState));
+      this.roomManager.updateRoom(this.multiplayer.room.id, {
+        current_wave: this.wave,
+        game_state: gameState,
+      }).catch((error) => {
+        this.multiplayer.statusMessage = error.message;
+      });
+    }
+  }
+
+  serializeSharedState() {
+    return {
+      wave: this.wave,
+      spawnQueue: this.spawnQueue,
+      enemies: this.enemies.map((enemy) => ({
+        id: enemy.id,
+        kind: enemy.kind,
+        x: enemy.x,
+        y: enemy.y,
+        angle: enemy.angle || 0,
+        health: enemy.health,
+        maxHealth: enemy.maxHealth,
+        flash: enemy.flash,
+      })),
+      pickups: this.pickups.map((pickup) => ({
+        id: pickup.id,
+        x: pickup.x,
+        y: pickup.y,
+        type: pickup.type,
+        pulse: pickup.pulse,
+      })),
+    };
+  }
+
+  applySyncState(payload = {}) {
+    this.wave = payload.wave || this.wave;
+    this.spawnQueue = payload.spawnQueue || 0;
+    this.enemies = (payload.enemies || []).map((data) => {
+      const existing = this.enemies.find((enemy) => enemy.id === data.id);
+      const enemy = existing || (data.kind === 'rival' ? new Rival(data.x, data.y, this.wave) : new Zombie(data.x, data.y, this.wave));
+      enemy.id = data.id;
+      enemy.x = Number(data.x);
+      enemy.y = Number(data.y);
+      enemy.angle = Number(data.angle || enemy.angle || 0);
+      enemy.health = Number(data.health);
+      enemy.maxHealth = Number(data.maxHealth || enemy.maxHealth);
+      enemy.flash = Number(data.flash || 0);
+      return enemy;
+    });
+    this.pickups = (payload.pickups || []).map((data) => {
+      const pickup = new Pickup(Number(data.x), Number(data.y), data.type);
+      pickup.id = data.id;
+      pickup.pulse = Number(data.pulse || pickup.pulse);
+      return pickup;
+    });
+  }
+
+  nearestLivingPlayer(from) {
+    const candidates = [{ ...this.player, isLocal: true }];
+    if (this.isMultiplayer()) {
+      for (const remote of this.multiplayer.remotePlayers.values()) {
+        if (remote.isConnected && remote.health > 0) candidates.push({ ...remote, isLocal: false });
+      }
+    }
+    return candidates
+      .filter((player) => player.health > 0)
+      .sort((a, b) => distance(from, a) - distance(from, b))[0] || null;
   }
 
   spawnEnemy() {
@@ -178,7 +453,9 @@ export class Game {
       tries += 1;
     } while ((distance({ x, y }, this.player) < 520 || isBlocked(x, y, radius, this.world)) && tries < 80);
 
-    this.enemies.push(chance(0.18 + this.wave * 0.015) ? new Rival(x, y, this.wave) : new Zombie(x, y, this.wave));
+    const enemy = chance(0.18 + this.wave * 0.015) ? new Rival(x, y, this.wave) : new Zombie(x, y, this.wave);
+    enemy.id = crypto.randomUUID();
+    this.enemies.push(enemy);
   }
 
   nextWave() {
@@ -187,6 +464,12 @@ export class Game {
     this.spawnTimer = 0.8;
     this.addFloatingText(`Wave ${this.wave}`, this.player.x, this.player.y - 60, '#ffd166');
     if (this.wave > 1) this.pickups.push(this.createSafePickup());
+    if (this.isMultiplayer() && this.multiplayer.isHost) {
+      this.roomManager.updateRoom(this.multiplayer.room.id, { current_wave: this.wave }).catch((error) => {
+        this.multiplayer.statusMessage = error.message;
+      });
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.WAVE_STARTED, nowPayload({ wave: this.wave }));
+    }
   }
 
   createSafePickup(type = null) {
@@ -198,7 +481,9 @@ export class Game {
       y = rand(180, WORLD.height - 180);
       tries += 1;
     } while ((isBlocked(x, y, 24, this.world) || distance({ x, y }, this.player) < 120) && tries < 80);
-    return new Pickup(x, y, type);
+    const pickup = new Pickup(x, y, type);
+    pickup.id = crypto.randomUUID();
+    return pickup;
   }
 
   handleHits() {
@@ -211,7 +496,14 @@ export class Game {
           bullet.dead = true;
           this.burst(bullet.x, bullet.y, '#ffe66d', 5);
           this.addFloatingText(`-${bullet.damage}`, enemy.x, enemy.y - 20, '#fff6d1');
-          if (enemy.dead) this.killEnemy(enemy);
+          if (this.isMultiplayer() && this.multiplayer.isHost) {
+            this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_HIT, nowPayload({
+              zombieId: enemy.id,
+              damage: bullet.damage,
+              shooterPlayerId: bullet.ownerId || this.multiplayer.localPlayerId,
+            }));
+          }
+          if (enemy.dead) this.killEnemy(enemy, bullet.ownerId);
           break;
         }
       } else if (distance(bullet, this.player) < bullet.r + this.player.r) {
@@ -236,14 +528,34 @@ export class Game {
       }
       this.audio.pickup();
       this.burst(pickup.x, pickup.y, pickup.color, 8);
+      if (this.isMultiplayer()) {
+        this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PICKUP_COLLECTED, nowPayload({
+          pickupId: pickup.id,
+          playerId: this.multiplayer.localPlayerId,
+          pickupType: pickup.type,
+        }));
+      }
     }
   }
 
-  killEnemy(enemy) {
+  killEnemy(enemy, ownerId = null) {
     this.score += enemy.kind === 'rival' ? 90 : 45;
+    if (this.isMultiplayer() && ownerId && ownerId !== this.multiplayer.localPlayerId) this.score -= enemy.kind === 'rival' ? 90 : 45;
+    if (this.isMultiplayer() && (!ownerId || ownerId === this.multiplayer.localPlayerId)) this.multiplayer.zombiesKilled += 1;
     this.audio.enemyDown();
     this.burst(enemy.x, enemy.y, enemy.kind === 'rival' ? '#ef476f' : '#78a85d', 12);
-    if (chance(0.18)) this.pickups.push(new Pickup(enemy.x, enemy.y));
+    if (this.isMultiplayer() && this.multiplayer.isHost) {
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_KILLED, nowPayload({
+        zombieId: enemy.id,
+        killerPlayerId: ownerId || this.multiplayer.localPlayerId,
+        scoreAwarded: enemy.kind === 'rival' ? 90 : 45,
+      }));
+    }
+    if (chance(0.18) && (!this.isMultiplayer() || this.multiplayer.isHost)) {
+      const pickup = new Pickup(enemy.x, enemy.y);
+      pickup.id = crypto.randomUUID();
+      this.pickups.push(pickup);
+    }
   }
 
   burst(x, y, color, amount) {
@@ -262,6 +574,24 @@ export class Game {
     this.floaters = this.floaters.filter((text) => text.life > 0);
   }
 
+  saveMultiplayerResult(survived) {
+    if (!this.isMultiplayer() || this.multiplayerResultSaved) return;
+    this.multiplayerResultSaved = true;
+    this.roomManager.saveResult({
+      room: this.multiplayer.room,
+      playerName: this.multiplayer.localPlayerName,
+      score: this.score,
+      wavesSurvived: this.wave,
+      zombiesKilled: this.multiplayer.zombiesKilled,
+      survived,
+    });
+    this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.GAME_OVER, nowPayload({
+      score: this.score,
+      wavesSurvived: this.wave,
+      survived,
+    }));
+  }
+
   draw() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.save();
@@ -273,7 +603,25 @@ export class Game {
       .slice()
       .sort((a, b) => a.y - b.y)
       .forEach((enemy) => (enemy.kind === 'rival' ? drawRival(this.ctx, enemy) : drawZombie(this.ctx, enemy)));
-    drawPlayer(this.ctx, this.player);
+    if (this.isMultiplayer()) {
+      for (const remote of this.multiplayer.remotePlayers.values()) {
+        if (!remote.isConnected) continue;
+        drawPlayer(this.ctx, remote, {
+          name: remote.playerName,
+          shirt: remote.playerSlot === 1 ? '#4cc9a7' : '#57b8ff',
+          glow: remote.playerSlot === 1 ? '#4cc9a7' : '#57b8ff',
+          labelColor: remote.playerSlot === 1 ? '#9ff3d8' : '#9ee7ff',
+        });
+      }
+    }
+    drawPlayer(this.ctx, this.player, this.isMultiplayer()
+      ? {
+          name: `${this.multiplayer.localPlayerName} (You)`,
+          shirt: this.multiplayer.localSlot === 1 ? '#4cc9a7' : '#57b8ff',
+          glow: '#ffd166',
+          labelColor: '#fff6d1',
+        }
+      : {});
     this.particles.forEach((particle) => particle.draw(this.ctx));
     this.floaters.forEach((text) => text.draw(this.ctx));
     this.ctx.restore();
