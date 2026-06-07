@@ -33,12 +33,12 @@ export class UI {
     const markup = `
       <div class="hud-row">
         <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
-        <div class="stat">Score <b>${game.score}</b></div>
-        <div class="stat">Money <b>$${game.money}</b></div>
-        <div class="stat">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
-        <div class="stat">Wave <b>${game.wave}</b></div>
-        <div class="stat">Zombies <b>${game.zombiesRemaining?.() ?? game.enemies.length}</b></div>
-        <div class="stat">${game.modeLabel?.() || 'Single'} / ${game.difficultyLabel?.() || 'Medium'}</div>
+        <div class="stat stat-score">Score <b>${game.score}</b></div>
+        <div class="stat stat-money">$<b>${game.money}</b></div>
+        <div class="stat stat-weapon">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
+        <div class="stat stat-wave">W<b>${game.wave}</b></div>
+        <div class="stat stat-zombies">Z<b>${game.zombiesRemaining?.() ?? game.enemies.length}</b></div>
+        <div class="stat stat-mode">${game.modeLabel?.() || 'Single'} / ${game.difficultyLabel?.() || 'Medium'}</div>
         <div class="cooldown"><span style="transform:scaleX(${cooldown})"></span><p>Fire</p></div>
         <button class="hud-button" type="button" data-action="shop">Shop</button>
         ${game.isMultiplayer?.() ? '<button class="hud-button" type="button" data-action="leave-room">Leave</button>' : ''}
@@ -68,7 +68,10 @@ export class UI {
         return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Score ${score} $${money}</span>`;
       })
       .join('');
-    return `<div class="multiplayer-hud">${rows}<span class="connection-copy">${game.multiplayer.statusMessage || 'Connected'}</span></div>`;
+    const status = game.multiplayer.statusMessage
+      ? `<span class="connection-copy">${game.multiplayer.statusMessage}</span>`
+      : '';
+    return `<div class="multiplayer-hud">${rows}${status}</div>`;
   }
 
   renderOverlay(state, game) {
