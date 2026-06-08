@@ -5,8 +5,8 @@ export const TOWER_TIERS = {
   barricade: {
     id: 'barricade',
     name: 'Guard Tower',
-    price: 263,
-    health: 533,
+    price: 250,
+    health: 300,
     damage: 9,
     range: 320,
     fireDelay: 0.82,
@@ -16,8 +16,8 @@ export const TOWER_TIERS = {
   sentry: {
     id: 'sentry',
     name: 'Sentry Tower',
-    price: 481,
-    health: 960,
+    price: 450,
+    health: 500,
     damage: 14,
     range: 430,
     fireDelay: 0.68,
@@ -27,8 +27,8 @@ export const TOWER_TIERS = {
   bastion: {
     id: 'bastion',
     name: 'Bastion Tower',
-    price: 744,
-    health: 1493,
+    price: 600,
+    health: 700,
     damage: 20,
     range: 520,
     fireDelay: 0.58,
