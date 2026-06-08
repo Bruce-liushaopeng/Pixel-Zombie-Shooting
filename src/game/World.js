@@ -7,7 +7,12 @@ export class World {
     this.height = WORLD.height;
     this.obstacles = [];
     this.details = [];
+    this.theme = { id: 'city', ground: COLORS.grassDark, road: COLORS.asphalt, accent: '#e7d98a' };
     this.build();
+  }
+
+  setTheme(theme) {
+    this.theme = theme;
   }
 
   build() {
@@ -28,7 +33,7 @@ export class World {
       this.details.push({
         x: rand(20, this.width - 20),
         y: rand(20, this.height - 20),
-        kind: Math.random() > 0.5 ? 'crack' : 'grass',
+        kind: ['crack', 'grass', 'spark', 'puddle', 'ice', 'neon'][Math.floor(Math.random() * 6)],
       });
     }
   }
@@ -41,7 +46,7 @@ export class World {
       h: camera.canvas.height + 160,
     };
 
-    ctx.fillStyle = COLORS.grassDark;
+    ctx.fillStyle = this.theme.ground || COLORS.grassDark;
     ctx.fillRect(view.x, view.y, view.w, view.h);
 
     this.drawRoads(ctx, view);
@@ -68,7 +73,7 @@ export class World {
       { x: 2190, y: 0, w: 130, h: this.height },
     ];
 
-    ctx.fillStyle = COLORS.asphalt;
+    ctx.fillStyle = this.theme.road || COLORS.asphalt;
     for (const road of [...horizontalRoads, ...verticalRoads]) {
       if (this.isVisible(road, view)) ctx.fillRect(road.x, road.y, road.w, road.h);
     }
@@ -83,7 +88,7 @@ export class World {
       if (this.isVisible(curb, view)) ctx.fillRect(curb.x, curb.y, curb.w, curb.h);
     }
 
-    ctx.fillStyle = '#e7d98a';
+    ctx.fillStyle = this.theme.accent || '#e7d98a';
     for (let x = Math.max(24, Math.floor(view.x / 96) * 96); x < view.x + view.w; x += 96) {
       ctx.fillRect(x, 446, 42, 5);
       ctx.fillRect(x, 1002, 42, 5);
@@ -100,6 +105,18 @@ export class World {
         ctx.lineTo(detail.x + 16, detail.y + 5);
         ctx.lineTo(detail.x + 22, detail.y - 2);
         ctx.stroke();
+      } else if (detail.kind === 'spark') {
+        ctx.fillStyle = this.theme.accent || '#ffd166';
+        ctx.fillRect(detail.x, detail.y, 5, 5);
+      } else if (detail.kind === 'puddle') {
+        ctx.fillStyle = 'rgba(112, 224, 0, 0.35)';
+        ctx.fillRect(detail.x, detail.y, 18, 8);
+      } else if (detail.kind === 'ice') {
+        ctx.fillStyle = 'rgba(158, 231, 255, 0.38)';
+        ctx.fillRect(detail.x, detail.y, 18, 5);
+      } else if (detail.kind === 'neon') {
+        ctx.fillStyle = this.theme.accent || '#b38cff';
+        ctx.fillRect(detail.x, detail.y, 4, 18);
       } else {
         ctx.fillStyle = COLORS.grass;
         ctx.fillRect(detail.x, detail.y, 14, 6);

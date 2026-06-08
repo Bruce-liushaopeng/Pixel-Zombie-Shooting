@@ -1,13 +1,11 @@
 export class SpecialAbilityManager {
   constructor() {
     this.charge = 0;
-    this.chargeTime = 30;
     this.state = 'charging';
   }
 
   update(dt) {
     if (this.state === 'activated') this.state = 'charging';
-    this.addCharge(dt / this.chargeTime);
   }
 
   addCharge(amount) {
@@ -30,4 +28,3 @@ export class SpecialAbilityManager {
     return Math.round(this.charge * 100);
   }
 }
-

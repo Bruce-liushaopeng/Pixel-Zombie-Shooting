@@ -11,20 +11,40 @@ export class Zombie extends Entity {
     this.typeId = type.id;
     this.label = type.label;
     this.color = type.color;
+    this.behavior = type.behavior || 'basic';
+    this.isBoss = Boolean(type.boss);
     this.attackDamage = Math.round(type.damage * (difficulty?.damageMultiplier || 1));
     this.reward = Math.round(type.reward * (difficulty?.scoreMultiplier || 1));
     this.moneyReward = type.money;
     this.speed = (82 + wave * 3) * type.speed * (difficulty?.speedMultiplier || 1);
     this.kind = 'zombie';
     this.warnTimer = 0;
+    this.movePhase = Math.random() * Math.PI * 2;
+    this.chargeTimer = 0.6 + Math.random() * 1.4;
   }
 
   update(dt, game) {
     const target = game.nearestLivingPlayer(this);
     if (!target) return;
-    const dir = normalize(target.x - this.x, target.y - this.y);
-    this.x += dir.x * this.speed * dt;
-    this.y += dir.y * this.speed * dt;
+    let dir = normalize(target.x - this.x, target.y - this.y);
+    let speed = this.speed;
+    this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+    this.movePhase += dt * 5;
+    if (this.behavior === 'angry' && this.health < this.maxHealth * 0.55) speed *= 1.65;
+    if (this.behavior === 'dodger') {
+      const side = Math.sin(this.movePhase) * 0.55;
+      dir = normalize(dir.x - dir.y * side, dir.y + dir.x * side);
+    }
+    if (this.behavior === 'charger') {
+      this.chargeTimer -= dt;
+      if (this.chargeTimer < 0.28) speed *= 2.4;
+      if (this.chargeTimer <= 0) this.chargeTimer = 1.4 + Math.random() * 1.4;
+    }
+    if (this.behavior === 'swarm') {
+      speed *= 1 + Math.sin(this.movePhase) * 0.18;
+    }
+    this.x += dir.x * speed * dt;
+    this.y += dir.y * speed * dt;
     resolveWorldCollisions(this, game.world);
     if (this.typeId === 'exploder' && distance(this, target) < this.r + target.r + 24) {
       this.warnTimer += dt;
@@ -49,18 +69,21 @@ export class Zombie extends Entity {
 export class Rival extends Entity {
   constructor(x, y, wave, typeId = 'spitter', difficulty = null) {
     const type = getZombieType(typeId === 'rival' ? 'spitter' : typeId);
-    const rangedHealthMultiplier = type.id === 'spitter' ? 0.62 : 1;
+    const rangedHealthMultiplier = type.boss ? 1 : 0.62;
     const health = Math.round((type.health + wave * 5) * rangedHealthMultiplier * (difficulty?.healthMultiplier || 1));
     super({ x, y, r: type.radius, health });
     this.typeId = type.id;
     this.label = type.label;
     this.color = type.color;
+    this.behavior = type.behavior || 'ranged';
+    this.isBoss = Boolean(type.boss);
     this.attackDamage = Math.round(type.damage * (difficulty?.damageMultiplier || 1));
     this.reward = Math.round(type.reward * (difficulty?.scoreMultiplier || 1));
     this.moneyReward = type.money;
     this.speed = 120 * type.speed * (difficulty?.speedMultiplier || 1);
     this.kind = 'rival';
     this.shootTimer = 1 + Math.random();
+    this.summonTimer = 5 + Math.random() * 3;
     this.angle = 0;
   }
 
@@ -76,7 +99,7 @@ export class Rival extends Entity {
     this.angle = Math.atan2(target.y - this.y, target.x - this.x);
     this.shootTimer -= dt;
     if (this.shootTimer <= 0 && dist < 680) {
-      this.shootTimer = 1.45 + Math.random() * 0.7;
+      this.shootTimer = (this.isBoss ? 0.9 : 1.45) + Math.random() * 0.7;
       game.spawnBullet({
         x: this.x + dir.x * 24,
         y: this.y + dir.y * 24,
@@ -88,6 +111,14 @@ export class Rival extends Entity {
         life: 1.8,
         color: this.color,
       });
+    }
+    if (this.behavior === 'summoner') {
+      this.summonTimer -= dt;
+      if (this.summonTimer <= 0) {
+        this.summonTimer = 5.5;
+        game.spawnEnemyNear(this.x, this.y, 'swarm');
+        game.spawnEnemyNear(this.x, this.y, 'weak');
+      }
     }
     this.updateBase(dt);
   }

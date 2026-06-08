@@ -43,19 +43,40 @@ export function drawPlayer(ctx, entity, options = {}) {
 }
 
 export function drawZombie(ctx, enemy) {
+  const bob = Math.sin(enemy.movePhase || 0) * Math.min(3, enemy.r * 0.12);
+  const isSmall = enemy.r <= 13;
+  const isTank = enemy.r >= 20 || enemy.behavior === 'tank';
+  const isQuick = ['charger', 'dodger', 'swarm'].includes(enemy.behavior) || ['fast', 'runner'].includes(enemy.typeId);
   ctx.save();
-  ctx.translate(enemy.x, enemy.y);
+  ctx.translate(enemy.x, enemy.y + bob);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.fillRect(-enemy.r + 2, enemy.r - 3 - bob, enemy.r * 2 - 4, 6);
   ctx.fillStyle = enemy.flash > 0 ? '#fff8dc' : COLORS.outline;
-  ctx.fillRect(-enemy.r + 3, -enemy.r, enemy.r * 2 - 6, enemy.r * 2);
+  ctx.fillRect(-enemy.r + (isSmall ? 5 : 3), -enemy.r, enemy.r * 2 - (isSmall ? 10 : 6), enemy.r * 2);
   ctx.fillStyle = enemy.flash > 0 ? '#ffe66d' : enemy.color || '#78a85d';
-  ctx.fillRect(-enemy.r + 7, -enemy.r + 2, enemy.r * 2 - 14, 13);
-  ctx.fillStyle = '#546a38';
-  ctx.fillRect(-enemy.r + 5, 0, enemy.r * 2 - 10, enemy.r + 2);
+  ctx.fillRect(-enemy.r + (isSmall ? 8 : 7), -enemy.r + 2, enemy.r * 2 - (isSmall ? 16 : 14), isTank ? 16 : 13);
+  ctx.fillStyle = isTank ? '#3d4a32' : '#546a38';
+  ctx.fillRect(-enemy.r + 5, isSmall ? 2 : 0, enemy.r * 2 - 10, enemy.r + (isTank ? 6 : 2));
   ctx.fillStyle = '#2b3828';
   ctx.fillRect(-6, -9, 3, 3);
   ctx.fillRect(4, -9, 3, 3);
   ctx.fillStyle = '#8a3038';
   ctx.fillRect(-4, -2, 9, 3);
+  if (isTank) {
+    ctx.fillStyle = '#c8d1d8';
+    ctx.fillRect(-enemy.r + 8, -enemy.r + 8, 5, enemy.r + 4);
+    ctx.fillRect(enemy.r - 13, -enemy.r + 8, 5, enemy.r + 4);
+  }
+  if (isQuick) {
+    ctx.fillStyle = '#fff6d1';
+    ctx.fillRect(-enemy.r + 2, enemy.r - 7, 5, 8);
+    ctx.fillRect(enemy.r - 7, enemy.r - 9, 5, 8);
+  }
+  if (enemy.isBoss) {
+    ctx.fillStyle = '#fff6d1';
+    ctx.fillRect(-enemy.r + 7, -enemy.r - 7, 8, 8);
+    ctx.fillRect(enemy.r - 15, -enemy.r - 7, 8, 8);
+  }
   if (enemy.typeId === 'exploder') {
     ctx.fillStyle = enemy.warnTimer > 0 ? '#ffd166' : '#ff8c42';
     ctx.fillRect(-4, 7, 8, 8);
@@ -65,17 +86,29 @@ export function drawZombie(ctx, enemy) {
 }
 
 export function drawRival(ctx, enemy) {
+  const isBoss = enemy.isBoss;
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
   ctx.rotate(enemy.angle);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.fillRect(-enemy.r + 3, enemy.r - 3, enemy.r * 2 - 6, 6);
   ctx.fillStyle = enemy.flash > 0 ? '#fff8dc' : COLORS.outline;
-  ctx.fillRect(-13, -13, 26, 26);
+  ctx.fillRect(-enemy.r + 5, -enemy.r + 3, enemy.r * 2 - 10, enemy.r * 2 - 4);
   ctx.fillStyle = '#d99b6c';
-  ctx.fillRect(-8, -13, 16, 10);
+  ctx.fillRect(-8, -enemy.r + 3, 16, 10);
   ctx.fillStyle = enemy.color || '#ef476f';
-  ctx.fillRect(-11, -3, 22, 17);
+  ctx.fillRect(-enemy.r + 8, -3, enemy.r * 2 - 16, enemy.r + 3);
   ctx.fillStyle = '#111820';
-  ctx.fillRect(7, -4, 18, 6);
+  ctx.fillRect(enemy.r - 9, -4, isBoss ? 24 : 18, 6);
+  if (enemy.behavior === 'summoner') {
+    ctx.fillStyle = '#b38cff';
+    ctx.fillRect(-4, enemy.r - 11, 8, 8);
+  }
+  if (isBoss) {
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(-enemy.r + 7, -enemy.r - 5, 7, 7);
+    ctx.fillRect(enemy.r - 14, -enemy.r - 5, 7, 7);
+  }
   ctx.restore();
   drawEnemyLabel(ctx, enemy);
 }

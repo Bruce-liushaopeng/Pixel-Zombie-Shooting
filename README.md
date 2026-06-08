@@ -28,6 +28,9 @@ The project expects the existing `rooms`, `room_players`, `room_events`, and `ga
 - Mouse: aim
 - Left click: shoot
 - `P` or `Esc`: pause/resume
+- `B`: open the weapon shop
+- `Q` or Space: use Special when charged
+- `M`: mute/unmute generated audio
 
 ## Mobile controls
 
@@ -47,11 +50,11 @@ Before starting, choose Easy, Medium, or Hard. Difficulty changes zombie counts,
 - Multiplayer Co-op: two players fight zombies together, with friendly fire disabled
 - Multiplayer PvP: two players can damage each other while zombies remain an environmental threat
 
-Players also level up from score. Leveling restores HP, increases weapon damage, slightly improves fire rate, and makes the special ability stronger.
+Players also level up from score. Each level restores exactly 10 HP, capped at max HP, and adds +2 bullet damage per level. Leveling does not increase fire rate.
 
 ## Shop and weapons
 
-Press `B` or click/tap Shop during a run. In single-player the shop pauses the game; in multiplayer the game continues while shopping.
+Press `B` or click/tap Shop during a run. In single-player the shop pauses the game; in multiplayer the game continues while shopping. The shop has tabs for weapons and paid HP recovery.
 
 Score and money are separate. Score is your final performance value and is never spent; money is the shop currency. Weapons include:
 
@@ -64,11 +67,15 @@ Score and money are separate. Score is your final performance value and is never
 
 When a limited-ammo weapon runs dry, the player automatically switches back to the Starter Pistol.
 
-## Special ability and revive
+## Progression, themes, and special
 
-The special ability charges over time and from combat. Press `Q`, Space, or tap the Special button on mobile to release a radial shockwave that damages nearby enemies.
+Waves unlock new enemy variants and map themes: Abandoned City, Toxic Zone, Burning Factory, Frozen Outpost, and Mutant Lab. Theme changes alter the map palette, props, zombie pool, and generated chiptune loop. Boss waves appear every 5 waves and display a boss health bar with intensified music.
 
-In Multiplayer Co-op, one downed player does not immediately end the run. If the teammate is still alive, the downed player revives after a short countdown while keeping score, money, level, weapon, and ammo. If both players are down at the same time, the co-op run ends.
+The special ability charges only from combat hits and kill bonuses. Press `Q`, Space, or tap the circular Special button on mobile when it reaches READY to launch an automatic rocket toward the best nearby enemy group. The rocket deals area damage, scales modestly with player level, and resets charge to 0%.
+
+## Revive
+
+In Multiplayer Co-op, one downed player does not immediately end the run. If the teammate is still alive, the downed player revives after a countdown with 50% HP and the Starter Pistol. Score, money, and level are kept, but purchased weapon ammo is lost. If both players are down at the same time, the co-op run ends.
 
 ## Multiplayer
 
@@ -109,9 +116,10 @@ This is a playable prototype using Supabase Realtime and database events. For a 
 - Weapon shop with ammo-limited purchased weapons
 - Separate score and money economy, so shop spending does not reduce final score
 - Score-based level progression with level-up healing and weapon scaling
-- Charged radial special ability
+- Combat-charged special rocket ability
 - Co-op downed/revive flow
-- Zombie variety: normal, fast, tank, spitter, exploder, and boss enemies
+- 30 zombie and boss variants with theme and wave availability
+- Wave-based map themes with generated chiptune music and boss music intensity
 - Two enemy types:
   - Zombie: slow chaser with contact damage
   - Rival survivor: keeps range and fires back

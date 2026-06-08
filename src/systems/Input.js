@@ -9,6 +9,7 @@ export class Input {
     this.pausePressed = false;
     this.shopPressed = false;
     this.specialPressed = false;
+    this.audioPressed = false;
     this.mobile = new MobileControls(this.frame);
     this.lastMobileAim = { x: 1, y: 0 };
 
@@ -17,6 +18,7 @@ export class Input {
       if (event.key.toLowerCase() === 'p' || event.key === 'Escape') this.pausePressed = true;
       if (event.key.toLowerCase() === 'b') this.shopPressed = true;
       if (event.key === ' ' || event.key.toLowerCase() === 'q') this.specialPressed = true;
+      if (event.key.toLowerCase() === 'm') this.audioPressed = true;
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.key.toLowerCase()));
 
@@ -85,5 +87,6 @@ export class Input {
     this.pausePressed = false;
     this.shopPressed = false;
     this.specialPressed = false;
+    this.audioPressed = false;
   }
 }

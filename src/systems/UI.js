@@ -12,7 +12,9 @@ export class UI {
     this.onOpenShop = () => {};
     this.onCloseShop = () => {};
     this.onBuyWeapon = () => {};
+    this.onBuyHealth = () => {};
     this.onSpecial = () => {};
+    this.onAudioToggle = () => {};
     this.onRestart = () => {};
     this.onResume = () => {};
   }
@@ -20,7 +22,8 @@ export class UI {
   renderHud(game) {
     const healthPercent = Math.max(0, game.player.health / game.player.maxHealth) * 100;
     const level = game.levelManager?.progress(game.score) || { level: 1, earned: 0, next: 100, percent: 0 };
-    const specialLabel = game.special?.canUse() ? 'SPECIAL' : `${game.special?.percent() ?? 0}%`;
+    const specialPercent = game.special?.percent() ?? 0;
+    const specialLabel = game.special?.canUse() ? 'READY' : `${specialPercent}%`;
     const abilityTags = [...game.player.abilities.entries()]
       .map(([key, time]) => {
         const ability = ABILITIES[key];
@@ -30,6 +33,9 @@ export class UI {
 
     const multiplayer = game.isMultiplayer?.()
       ? this.renderMultiplayerHud(game)
+      : '';
+    const downed = game.revive?.isDowned
+      ? `<div class="downed-banner"><b>Reviving in ${Math.ceil(game.revive.timer)}s</b><span>Return with 50% HP and pistol. Money stays.</span></div>`
       : '';
 
     const markup = `
@@ -46,11 +52,13 @@ export class UI {
           <div class="stat stat-weapon">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
           <div class="stat stat-wave">W<b>${game.wave}</b></div>
           <button class="hud-button shop-button" type="button" data-action="shop">Shop</button>
+          <button class="hud-button audio-button" type="button" data-action="audio-toggle">${game.audio?.enabled ? 'Mute' : 'Sound'}</button>
           ${game.isMultiplayer?.() ? '<button class="hud-button leave-button" type="button" data-action="leave-room">Leave</button>' : ''}
         </div>
-        <button class="hud-button special-button ${game.special?.canUse() ? 'is-ready' : ''}" type="button" data-action="special">${specialLabel}</button>
+        <button class="hud-button special-button ${game.special?.canUse() ? 'is-ready' : ''}" style="--charge:${specialPercent}%" type="button" data-action="special">${specialLabel}</button>
       </div>
       ${abilityTags ? `<div class="ability-row">${abilityTags}</div>` : ''}
+      ${downed}
       ${multiplayer}
     `;
     if (markup !== this.lastHud) {
@@ -59,6 +67,8 @@ export class UI {
       if (leaveButton) leaveButton.onclick = () => this.onLeaveRoom();
       const shopButton = this.hud.querySelector('[data-action="shop"]');
       if (shopButton) shopButton.onclick = () => this.onOpenShop();
+      const audioButton = this.hud.querySelector('[data-action="audio-toggle"]');
+      if (audioButton) audioButton.onclick = () => this.onAudioToggle();
       const specialButton = this.hud.querySelector('[data-action="special"]');
       if (specialButton) specialButton.onclick = () => this.onSpecial();
       this.lastHud = markup;
@@ -216,40 +226,79 @@ export class UI {
     this.overlay.querySelector('[data-action="leave-room"]').onclick = () => this.onLeaveRoom();
   }
 
-  renderShop(game, message = '') {
+  renderShop(game, message = '', tab = 'weapons') {
     const weapons = game.weaponManager.list();
+    const damageBonus = game.levelManager?.damageBonus() || 0;
+    const activeTab = tab === 'health' ? 'health' : 'weapons';
+    const missingHp = Math.max(0, game.player.maxHealth - game.player.health);
+    const healthItems = [
+      { label: '+25 HP', amount: 25, cost: 40 },
+      { label: '+50 HP', amount: 50, cost: 75 },
+      { label: 'Full Heal', amount: game.player.maxHealth, cost: 120 },
+    ];
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
       <div class="menu shop-menu">
+        <button class="shop-close" type="button" data-action="close-shop" aria-label="Close shop">X</button>
         <p class="eyebrow">${game.isMultiplayer?.() ? 'Game continues while shopping' : 'Paused shop'}</p>
-        <h1>Weapon Shop</h1>
+        <h1>Shop</h1>
         <p>Weapons cost money only. Current money: $${game.money}. Score is never spent.</p>
-        <div class="shop-grid">
-          ${weapons.map((weapon) => `
-            <article class="weapon-card ${weapon.equipped ? 'is-equipped' : ''}">
-              <h2>${this.escape(weapon.name)}</h2>
-              <p>${this.escape(weapon.description)}</p>
-              <dl>
-                <div><dt>Price</dt><dd>${weapon.price}</dd></div>
-                <div><dt>Damage</dt><dd>${weapon.damage}${weapon.pellets > 1 ? ` x${weapon.pellets}` : ''}</dd></div>
-                <div><dt>Fire</dt><dd>${Math.round(1000 / weapon.fireDelay)}/s</dd></div>
-                <div><dt>Ammo</dt><dd>${weapon.purchaseAmmo === Infinity ? '∞' : weapon.purchaseAmmo}</dd></div>
-              </dl>
-              <p class="ammo-copy">Owned: ${weapon.ownedAmmo === Infinity ? '∞' : weapon.ownedAmmo}</p>
-              <button class="pixel-button ${game.money < weapon.price ? 'secondary' : ''}" type="button" data-weapon="${weapon.id}">
-                ${weapon.equipped ? 'Refill / Buy' : 'Buy / Equip'}
-              </button>
-            </article>
-          `).join('')}
+        <div class="shop-tabs" role="tablist" aria-label="Shop tabs">
+          <button class="${activeTab === 'weapons' ? 'is-active' : ''}" type="button" data-shop-tab="weapons">Weapons</button>
+          <button class="${activeTab === 'health' ? 'is-active' : ''}" type="button" data-shop-tab="health">HP Back</button>
         </div>
+        ${activeTab === 'weapons' ? `
+          <div class="shop-grid">
+            ${weapons.map((weapon) => `
+              <article class="weapon-card ${weapon.equipped ? 'is-equipped' : ''}">
+                <h2>${this.escape(weapon.name)}</h2>
+                <p>${this.escape(weapon.description)}</p>
+                <dl>
+                  <div><dt>Price</dt><dd>${weapon.price}</dd></div>
+                  <div><dt>Damage</dt><dd>${weapon.damage}${damageBonus ? ` +${damageBonus}` : ''}${weapon.pellets > 1 ? ` x${weapon.pellets}` : ''}</dd></div>
+                  <div><dt>Fire</dt><dd>${Math.round(1000 / weapon.fireDelay)}/s</dd></div>
+                  <div><dt>Ammo</dt><dd>${weapon.purchaseAmmo === Infinity ? '∞' : weapon.purchaseAmmo}</dd></div>
+                </dl>
+                <p class="ammo-copy">Owned: ${weapon.ownedAmmo === Infinity ? '∞' : weapon.ownedAmmo}</p>
+                <button class="pixel-button ${game.money < weapon.price ? 'secondary' : ''}" type="button" data-weapon="${weapon.id}">
+                  ${weapon.equipped ? 'Refill / Buy' : 'Buy / Equip'}
+                </button>
+              </article>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="shop-grid health-grid">
+            ${healthItems.map((item) => `
+              <article class="weapon-card health-card">
+                <h2>${this.escape(item.label)}</h2>
+                <p>Recover HP during a run. Missing HP: ${Math.ceil(missingHp)}.</p>
+                <dl>
+                  <div><dt>Price</dt><dd>${item.cost}</dd></div>
+                  <div><dt>Recover</dt><dd>${Math.min(item.amount, Math.ceil(missingHp))}</dd></div>
+                </dl>
+                <button class="pixel-button ${game.money < item.cost || missingHp <= 0 ? 'secondary' : ''}" type="button" data-health-amount="${item.amount}" data-health-cost="${item.cost}">
+                  Buy HP
+                </button>
+              </article>
+            `).join('')}
+          </div>
+        `}
         ${message ? `<p class="${message.includes('Not enough') ? 'error-copy' : 'status-copy'}">${this.escape(message)}</p>` : ''}
         <button class="pixel-button secondary" type="button" data-action="close-shop">Close</button>
       </div>
     `;
+    this.overlay.querySelectorAll('[data-shop-tab]').forEach((button) => {
+      button.onclick = () => this.renderShop(game, '', button.dataset.shopTab);
+    });
     this.overlay.querySelectorAll('[data-weapon]').forEach((button) => {
       button.onclick = () => this.onBuyWeapon(button.dataset.weapon);
     });
-    this.overlay.querySelector('[data-action="close-shop"]').onclick = () => this.onCloseShop();
+    this.overlay.querySelectorAll('[data-health-amount]').forEach((button) => {
+      button.onclick = () => this.onBuyHealth(Number(button.dataset.healthAmount), Number(button.dataset.healthCost));
+    });
+    this.overlay.querySelectorAll('[data-action="close-shop"]').forEach((button) => {
+      button.onclick = () => this.onCloseShop();
+    });
   }
 
   renderDifficultySelector(selected) {

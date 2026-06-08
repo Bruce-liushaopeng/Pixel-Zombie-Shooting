@@ -2,11 +2,21 @@ export class AudioSystem {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    this.musicTimer = null;
+    this.musicStep = 0;
+    this.musicNotes = [220, 277, 330, 392];
+    this.musicGain = 0.016;
   }
 
   resume() {
     if (!this.ctx) this.ctx = new AudioContext();
     if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.setMusic(this.musicNotes);
+  }
+
+  toggleMute() {
+    this.enabled = !this.enabled;
+    return this.enabled;
   }
 
   tone({ frequency = 220, duration = 0.08, type = 'square', gain = 0.06, slide = 0 }) {
@@ -38,5 +48,23 @@ export class AudioSystem {
 
   enemyDown() {
     this.tone({ frequency: 190, duration: 0.12, type: 'square', gain: 0.05, slide: -120 });
+  }
+
+  setMusic(notes, boss = false) {
+    this.musicNotes = notes || this.musicNotes;
+    this.musicGain = boss ? 0.026 : 0.016;
+    const interval = boss ? 180 : 260;
+    if (!this.ctx) return;
+    if (this.musicTimer && this.musicInterval === interval) return;
+    if (this.musicTimer) clearInterval(this.musicTimer);
+    this.musicInterval = interval;
+    this.musicTimer = setInterval(() => this.musicTick(), interval);
+  }
+
+  musicTick() {
+    if (!this.enabled || !this.ctx) return;
+    const note = this.musicNotes[this.musicStep % this.musicNotes.length] * (this.musicStep % 8 === 7 ? 2 : 1);
+    this.musicStep += 1;
+    this.tone({ frequency: note, duration: 0.08, type: 'triangle', gain: this.musicGain });
   }
 }

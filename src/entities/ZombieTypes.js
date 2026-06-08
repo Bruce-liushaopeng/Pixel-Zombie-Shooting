@@ -62,7 +62,7 @@ export const ZOMBIE_TYPES = {
   boss: {
     id: 'boss',
     label: 'Boss',
-    health: 500,
+    health: 50,
     speed: 0.45,
     damage: 25,
     reward: 100,
@@ -70,9 +70,48 @@ export const ZOMBIE_TYPES = {
     radius: 31,
     color: '#b38cff',
     kind: 'rival',
+    boss: true,
   },
+  walker: { id: 'walker', label: 'Walker', health: 32, speed: 0.95, damage: 10, reward: 10, money: 5, radius: 16, color: '#78a85d', kind: 'zombie', behavior: 'basic', themes: ['city'], minWave: 1 },
+  runner: { id: 'runner', label: 'Runner', health: 20, speed: 1.75, damage: 7, reward: 15, money: 8, radius: 14, color: '#9be564', kind: 'zombie', behavior: 'fast', themes: ['city', 'sewer'], minWave: 2 },
+  crawler: { id: 'crawler', label: 'Crawler', health: 14, speed: 1.25, damage: 6, reward: 8, money: 4, radius: 11, color: '#90a955', kind: 'zombie', behavior: 'swarm', themes: ['city', 'sewer'], minWave: 2 },
+  armored: { id: 'armored', label: 'Armored', health: 85, speed: 0.7, damage: 13, reward: 24, money: 12, radius: 19, color: '#8d99ae', kind: 'zombie', behavior: 'tank', themes: ['city', 'factory'], minWave: 4 },
+  bruiser: { id: 'bruiser', label: 'Bruiser', health: 62, speed: 0.9, damage: 18, reward: 20, money: 10, radius: 20, color: '#a15c38', kind: 'zombie', behavior: 'basic', themes: ['city', 'factory'], minWave: 3 },
+  weak: { id: 'weak', label: 'Weak', health: 12, speed: 1.05, damage: 5, reward: 6, money: 3, radius: 13, color: '#a7c957', kind: 'zombie', behavior: 'swarm', themes: ['city', 'sewer'], minWave: 1 },
+  toxicSpitter: { id: 'toxicSpitter', label: 'Toxic', health: 28, speed: 0.82, damage: 8, reward: 20, money: 10, radius: 16, color: '#2dd36f', kind: 'rival', behavior: 'ranged', themes: ['sewer'], minWave: 5 },
+  boneThrower: { id: 'boneThrower', label: 'Thrower', health: 32, speed: 0.85, damage: 9, reward: 20, money: 10, radius: 16, color: '#e6ccb2', kind: 'rival', behavior: 'ranged', themes: ['city', 'factory'], minWave: 6 },
+  fireSpitter: { id: 'fireSpitter', label: 'Fire', health: 34, speed: 0.86, damage: 10, reward: 24, money: 12, radius: 17, color: '#ff7b00', kind: 'rival', behavior: 'ranged', themes: ['factory'], minWave: 10 },
+  frostSpitter: { id: 'frostSpitter', label: 'Frost', health: 34, speed: 0.82, damage: 8, reward: 24, money: 12, radius: 17, color: '#9ee7ff', kind: 'rival', behavior: 'ranged', themes: ['frozen'], minWave: 15 },
+  charger: { id: 'charger', label: 'Charger', health: 50, speed: 1.05, damage: 18, reward: 25, money: 12, radius: 18, color: '#ef476f', kind: 'zombie', behavior: 'charger', themes: ['factory', 'lab'], minWave: 8 },
+  angry: { id: 'angry', label: 'Angry', health: 48, speed: 1.05, damage: 12, reward: 22, money: 11, radius: 17, color: '#ff4d6d', kind: 'zombie', behavior: 'angry', themes: ['factory', 'lab'], minWave: 7 },
+  dodger: { id: 'dodger', label: 'Dodger', health: 24, speed: 1.35, damage: 8, reward: 18, money: 9, radius: 14, color: '#4cc9a7', kind: 'zombie', behavior: 'dodger', themes: ['city', 'lab'], minWave: 5 },
+  leaper: { id: 'leaper', label: 'Leaper', health: 35, speed: 1.12, damage: 14, reward: 24, money: 12, radius: 15, color: '#f72585', kind: 'zombie', behavior: 'charger', themes: ['sewer', 'lab'], minWave: 8 },
+  swarm: { id: 'swarm', label: 'Swarm', health: 10, speed: 1.45, damage: 5, reward: 7, money: 4, radius: 11, color: '#c7f9cc', kind: 'zombie', behavior: 'swarm', themes: ['sewer', 'lab'], minWave: 5 },
+  shield: { id: 'shield', label: 'Shield', health: 100, speed: 0.62, damage: 12, reward: 28, money: 14, radius: 20, color: '#adb5bd', kind: 'zombie', behavior: 'tank', themes: ['factory', 'lab'], minWave: 9 },
+  giant: { id: 'giant', label: 'Giant', health: 160, speed: 0.48, damage: 22, reward: 40, money: 20, radius: 27, color: '#7f5539', kind: 'zombie', behavior: 'tank', themes: ['factory', 'frozen'], minWave: 12 },
+  heavyBrute: { id: 'heavyBrute', label: 'Heavy', health: 135, speed: 0.55, damage: 26, reward: 38, money: 19, radius: 24, color: '#99582a', kind: 'zombie', behavior: 'tank', themes: ['factory', 'lab'], minWave: 12 },
+  sewerZombie: { id: 'sewerZombie', label: 'Sewer', health: 42, speed: 1.05, damage: 11, reward: 16, money: 8, radius: 16, color: '#38b000', kind: 'zombie', behavior: 'dodger', themes: ['sewer'], minWave: 5 },
+  labZombie: { id: 'labZombie', label: 'Lab', health: 58, speed: 1.1, damage: 13, reward: 26, money: 13, radius: 17, color: '#80ffdb', kind: 'zombie', behavior: 'angry', themes: ['lab'], minWave: 20 },
+  burningZombie: { id: 'burningZombie', label: 'Burning', health: 44, speed: 1.25, damage: 16, reward: 24, money: 12, radius: 17, color: '#ffba08', kind: 'zombie', behavior: 'fast', themes: ['factory'], minWave: 10 },
+  snowZombie: { id: 'snowZombie', label: 'Snow', health: 54, speed: 0.86, damage: 12, reward: 22, money: 11, radius: 17, color: '#caf0f8', kind: 'zombie', behavior: 'basic', themes: ['frozen'], minWave: 15 },
+  cyberZombie: { id: 'cyberZombie', label: 'Cyber', health: 70, speed: 1.18, damage: 15, reward: 32, money: 16, radius: 18, color: '#00f5d4', kind: 'zombie', behavior: 'dodger', themes: ['lab'], minWave: 20 },
+  redBruteBoss: { id: 'redBruteBoss', label: 'Red Boss', health: 520, speed: 0.55, damage: 28, reward: 120, money: 70, radius: 34, color: '#d00000', kind: 'zombie', behavior: 'angry', themes: ['factory', 'lab'], minWave: 5, boss: true },
+  angryBoss: { id: 'angryBoss', label: 'Angry Boss', health: 470, speed: 0.72, damage: 24, reward: 110, money: 65, radius: 32, color: '#ff0054', kind: 'zombie', behavior: 'charger', themes: ['sewer', 'factory'], minWave: 10, boss: true },
+  rangedBoss: { id: 'rangedBoss', label: 'Ranged Boss', health: 430, speed: 0.62, damage: 18, reward: 115, money: 68, radius: 31, color: '#7209b7', kind: 'rival', behavior: 'ranged', themes: ['frozen', 'lab'], minWave: 15, boss: true },
+  summonerBoss: { id: 'summonerBoss', label: 'Summoner', health: 500, speed: 0.58, damage: 20, reward: 130, money: 75, radius: 33, color: '#3a0ca3', kind: 'rival', behavior: 'summoner', themes: ['lab'], minWave: 20, boss: true },
+  finalMutantBoss: { id: 'finalMutantBoss', label: 'Mutant Boss', health: 760, speed: 0.65, damage: 30, reward: 180, money: 100, radius: 38, color: '#f15bb5', kind: 'rival', behavior: 'summoner', themes: ['lab'], minWave: 25, boss: true },
 };
 
 export function getZombieType(id = 'normal') {
   return ZOMBIE_TYPES[id] || ZOMBIE_TYPES.normal;
+}
+
+export function zombieTypesFor({ wave = 1, theme = 'city', boss = false } = {}) {
+  return Object.values(ZOMBIE_TYPES).filter((type) => {
+    if (Boolean(type.boss) !== boss) return false;
+    if ((type.minWave || 1) > wave) return false;
+    if (!type.themes) return true;
+    if (theme === 'city') return type.themes.includes('city');
+    return type.themes.includes(theme) || type.themes.includes('city');
+  });
 }

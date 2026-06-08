@@ -21,9 +21,11 @@ import { getDifficulty } from './DifficultyManager.js';
 import { getGameMode, getModeFromRoomMode } from './GameModeManager.js';
 import { WeaponManager } from './WeaponManager.js';
 import { getWeapon } from '../entities/WeaponTypes.js';
+import { getZombieType, zombieTypesFor } from '../entities/ZombieTypes.js';
 import { LevelManager } from './LevelManager.js';
 import { SpecialAbilityManager } from './SpecialAbilityManager.js';
 import { ReviveManager } from './ReviveManager.js';
+import { themeForWave, THEMES } from './ThemeManager.js';
 
 export class Game {
   constructor({ canvas, hud, overlay }) {
@@ -40,7 +42,9 @@ export class Game {
     this.ui.onOpenShop = () => this.openShop();
     this.ui.onCloseShop = () => this.closeShop();
     this.ui.onBuyWeapon = (weaponId) => this.buyWeapon(weaponId);
+    this.ui.onBuyHealth = (amount, cost) => this.buyHealth(amount, cost);
     this.ui.onSpecial = () => this.useSpecial();
+    this.ui.onAudioToggle = () => this.toggleAudio();
     this.ui.onRestart = () => this.start();
     this.ui.onResume = () => this.setState(GAME_STATE.PLAYING);
     this.roomManager = new RoomManager(supabase);
@@ -84,6 +88,8 @@ export class Game {
 
   reset({ startWave = true } = {}) {
     this.world = new World();
+    this.theme = themeForWave(1);
+    this.world.setTheme(this.theme);
     this.camera = new Camera(this.canvas, this.world);
     this.player = new Player(WORLD.width / 2, WORLD.height / 2);
     this.frame = 0;
@@ -100,7 +106,9 @@ export class Game {
     this.special = new SpecialAbilityManager();
     this.revive = new ReviveManager();
     this.specialRipples = [];
+    this.specialRockets = [];
     this.wave = 0;
+    this.bossSpawnedThisWave = false;
     this.spawnQueue = 0;
     this.spawnTimer = 0;
     this.weaponManager = new WeaponManager();
@@ -266,6 +274,11 @@ export class Game {
     return `${result}Final Score ${this.score}. Money Remaining $${this.money}. Zombies Killed ${this.zombiesKilled}. Waves Survived ${this.wave}. Weapon Purchases ${this.weaponPurchases}.`;
   }
 
+  toggleAudio() {
+    const enabled = this.audio.toggleMute();
+    this.addFloatingText(enabled ? 'Audio on' : 'Muted', this.player.x, this.player.y - 54, '#9ee7ff');
+  }
+
   weaponAmmoLabel() {
     const ammo = this.weaponManager.currentAmmo();
     return ammo === Infinity ? '∞' : String(ammo);
@@ -288,16 +301,10 @@ export class Game {
   }
 
   handleLevelUp() {
-    const previousMaxHealth = this.player.maxHealth;
-    this.player.maxHealth = Math.ceil(this.player.maxHealth * 1.2);
-    const missing = this.player.maxHealth - this.player.health;
-    const healed = Math.min(this.player.maxHealth - this.player.health, Math.max(30, Math.ceil(missing * 0.5)));
+    const healed = Math.min(10, this.player.maxHealth - this.player.health);
     this.player.health = Math.min(this.player.maxHealth, this.player.health + healed);
-    this.special.addCharge(0.22);
     this.specialRipples.push({ x: this.player.x, y: this.player.y, radius: 12, maxRadius: 120, life: 0.42 });
-    this.addFloatingText('LEVEL UP!', this.player.x, this.player.y - 72, '#ffd166');
-    this.addFloatingText(`Max HP ${previousMaxHealth}→${this.player.maxHealth}`, this.player.x, this.player.y - 61, '#fff6d1');
-    this.addFloatingText(`+${healed} HP`, this.player.x, this.player.y - 50, '#7bed9f');
+    this.addFloatingText('LEVEL UP! +10 HP', this.player.x, this.player.y - 72, '#ffd166');
     this.audio.pickup();
     if (this.isMultiplayer()) {
       this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.SYNC_STATE, nowPayload({
@@ -329,10 +336,10 @@ export class Game {
     }));
   }
 
-  openShop(message = '') {
+  openShop(message = '', tab = 'weapons') {
     this.shopOpen = true;
     if (!this.isMultiplayer()) this.state = GAME_STATE.PAUSED;
-    this.ui.renderShop(this, message);
+    this.ui.renderShop(this, message, tab);
   }
 
   closeShop() {
@@ -350,40 +357,77 @@ export class Game {
     this.ui.renderShop(this, result.message);
   }
 
+  buyHealth(amount, cost) {
+    if (this.player.health >= this.player.maxHealth) {
+      this.ui.renderShop(this, 'HP is already full.', 'health');
+      return;
+    }
+    if (this.money < cost) {
+      this.ui.renderShop(this, 'Not enough money.', 'health');
+      return;
+    }
+    const healed = Math.min(amount, this.player.maxHealth - this.player.health);
+    this.money -= cost;
+    this.player.health = Math.min(this.player.maxHealth, this.player.health + healed);
+    this.broadcastEconomy();
+    this.addFloatingText(`+${Math.ceil(healed)} HP`, this.player.x, this.player.y - 42, '#7bed9f');
+    this.audio.pickup();
+    this.ui.renderShop(this, `Recovered ${Math.ceil(healed)} HP.`, 'health');
+  }
+
   useSpecial() {
     if (this.revive.isDowned) return;
     if (!this.special.canUse()) {
       this.addFloatingText('Charging...', this.player.x, this.player.y - 54, '#9ee7ff');
       return;
     }
-    if (!this.special.use()) return;
-    const radius = 220;
-    const damage = Math.round(80 * this.levelManager.specialMultiplier());
-    this.specialRipples.push({ x: this.player.x, y: this.player.y, radius: 10, maxRadius: radius, life: 0.48 });
-    this.camera.addShake(9, 0.2);
-    this.audio.shoot();
-    let hits = 0;
-    for (const enemy of this.enemies) {
-      if (enemy.dead || distance(enemy, this.player) > radius + enemy.r) continue;
-      enemy.damage(damage);
-      enemy.flash = 0.22;
-      hits += 1;
-      this.addFloatingText(`-${damage}`, enemy.x, enemy.y - 22, '#b38cff');
-      if (enemy.dead) this.killEnemy(enemy);
+    const target = this.specialTarget();
+    if (!target) {
+      this.addFloatingText('No target', this.player.x, this.player.y - 54, '#9ee7ff');
+      return;
     }
-    this.addFloatingText(`SPECIAL ${hits}`, this.player.x, this.player.y - 62, '#b38cff');
+    if (!this.special.use()) return;
+    const damage = 80 + (this.levelManager.level - 1) * 6;
+    const rocket = {
+      x: this.player.x,
+      y: this.player.y,
+      targetX: target.x,
+      targetY: target.y,
+      damage,
+      radius: 110,
+      speed: 680,
+      trail: [],
+    };
+    this.specialRockets.push(rocket);
+    this.camera.addShake(4, 0.12);
+    this.audio.shoot();
+    this.addFloatingText('SPECIAL ROCKET', this.player.x, this.player.y - 62, '#b38cff');
     if (this.isMultiplayer()) {
       this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.SYNC_STATE, nowPayload({
         specialUsed: {
           playerId: this.multiplayer.localPlayerId,
           x: this.player.x,
           y: this.player.y,
-          radius,
+          targetX: target.x,
+          targetY: target.y,
+          radius: rocket.radius,
           damage,
           level: this.levelManager.level,
         },
       }));
     }
+  }
+
+  specialTarget() {
+    const living = this.enemies.filter((enemy) => !enemy.dead && distance(enemy, this.player) < 900);
+    if (!living.length) return null;
+    return living
+      .map((enemy) => ({
+        x: enemy.x,
+        y: enemy.y,
+        score: living.reduce((sum, other) => sum + (distance(enemy, other) < 170 ? 1 : 0), 0) * 1000 - distance(enemy, this.player),
+      }))
+      .sort((a, b) => b.score - a.score)[0];
   }
 
   loop(time) {
@@ -392,6 +436,7 @@ export class Game {
     if (this.input.pausePressed && this.state !== GAME_STATE.START && this.state !== GAME_STATE.GAME_OVER) {
       this.setState(this.state === GAME_STATE.PLAYING ? GAME_STATE.PAUSED : GAME_STATE.PLAYING);
     }
+    if (this.input.audioPressed) this.toggleAudio();
     if (this.input.shopPressed && this.state === GAME_STATE.PLAYING) this.openShop();
     if (this.input.specialPressed && this.state === GAME_STATE.PLAYING) this.useSpecial();
     if (this.state === GAME_STATE.PLAYING) this.update(dt);
@@ -412,6 +457,7 @@ export class Game {
         bullets: this.bullets.length,
         pickups: this.pickups.length,
         wave: this.wave,
+        theme: this.theme?.id,
         spawnQueue: this.spawnQueue,
         zombiesRemaining: this.zombiesRemaining(),
         multiplayer: this.isMultiplayer()
@@ -438,6 +484,7 @@ export class Game {
       ripple.life -= dt;
       ripple.radius += dt * 520;
     });
+    this.updateSpecialRockets(dt);
     this.multiplayer.updateRemotePlayers(dt);
     this.camera.follow(this.player, dt);
 
@@ -463,6 +510,7 @@ export class Game {
     this.handleHits();
     this.handleRevive(dt);
     this.cleanup();
+    this.syncBossMusic();
     this.syncMultiplayer();
 
     if (this.player.health <= 0 && !this.revive.isDowned) {
@@ -491,7 +539,6 @@ export class Game {
     }
     this.weaponManager.consumeAmmo();
     specs.forEach((spec) => this.spawnBullet(spec));
-    this.camera.addShake(3.5, 0.1);
     this.audio.shoot();
     if (this.isMultiplayer()) this.sendShootEvent(mouseWorld, weapon);
   }
@@ -503,8 +550,8 @@ export class Game {
   effectiveWeapon(weapon) {
     return {
       ...weapon,
-      damage: Math.round(weapon.damage * this.levelManager.damageMultiplier()),
-      fireDelay: Math.max(0.055, weapon.fireDelay / this.levelManager.fireRateMultiplier()),
+      damage: weapon.damage + this.levelManager.damageBonus(),
+      fireDelay: weapon.fireDelay,
     };
   }
 
@@ -619,6 +666,7 @@ export class Game {
       mode: this.roomMode,
       difficulty: this.difficultyId,
       spawnQueue: this.spawnQueue,
+      theme: this.theme?.id || 'city',
       enemies: this.enemies.map((enemy) => ({
         id: enemy.id,
         kind: enemy.kind,
@@ -655,11 +703,22 @@ export class Game {
     if (payload.specialUsed) {
       const special = payload.specialUsed;
       if (special.playerId !== this.multiplayer.localPlayerId) {
-        this.specialRipples.push({ x: special.x, y: special.y, radius: 10, maxRadius: special.radius, life: 0.48 });
+        this.specialRockets.push({
+          x: special.x,
+          y: special.y,
+          targetX: special.targetX,
+          targetY: special.targetY,
+          damage: special.damage,
+          radius: special.radius,
+          speed: 680,
+          trail: [],
+          visualOnly: true,
+        });
       }
       return;
     }
     this.wave = payload.wave || this.wave;
+    if (payload.theme) this.setTheme(payload.theme);
     this.roomMode = payload.mode || this.roomMode;
     this.difficultyId = payload.difficulty || this.difficultyId;
     this.spawnQueue = payload.spawnQueue || 0;
@@ -715,43 +774,66 @@ export class Game {
       tries += 1;
     } while ((distance({ x, y }, this.player) < 520 || isBlocked(x, y, radius, this.world)) && tries < 80);
 
-    const typeId = this.chooseZombieType();
-    const enemy = ['spitter', 'boss'].includes(typeId)
-      ? new Rival(x, y, this.wave, typeId, this.difficulty())
-      : new Zombie(x, y, this.wave, typeId, this.difficulty());
+    this.enemies.push(this.createEnemy(x, y, this.chooseZombieType()));
+    this.syncBossMusic();
+  }
+
+  createEnemy(x, y, typeId) {
+    const type = getZombieType(typeId);
+    const enemy = type.kind === 'rival'
+      ? new Rival(x, y, this.wave, type.id, this.difficulty())
+      : new Zombie(x, y, this.wave, type.id, this.difficulty());
     enemy.id = crypto.randomUUID();
-    this.enemies.push(enemy);
+    return enemy;
+  }
+
+  spawnEnemyNear(x, y, typeId = 'normal') {
+    const angle = rand(0, Math.PI * 2);
+    const distanceFromSource = rand(58, 118);
+    let spawnX = Math.max(48, Math.min(WORLD.width - 48, x + Math.cos(angle) * distanceFromSource));
+    let spawnY = Math.max(48, Math.min(WORLD.height - 48, y + Math.sin(angle) * distanceFromSource));
+    const radius = getZombieType(typeId).radius || 16;
+    if (isBlocked(spawnX, spawnY, radius, this.world)) {
+      spawnX = Math.max(48, Math.min(WORLD.width - 48, x));
+      spawnY = Math.max(48, Math.min(WORLD.height - 48, y));
+    }
+    this.enemies.push(this.createEnemy(spawnX, spawnY, typeId));
   }
 
   chooseZombieType() {
     const difficulty = this.difficulty();
-    if (this.wave > 0 && this.wave % difficulty.bossEvery === 0 && chance(this.difficultyId === 'hard' ? 0.75 : 0.5)) return 'boss';
-    if (this.wave < difficulty.specialWave) return 'normal';
-    const roll = Math.random();
-    if (this.difficultyId === 'hard') {
-      if (roll < 0.22) return 'fast';
-      if (roll < 0.38) return 'tank';
-      if (roll < 0.56) return 'spitter';
-      if (roll < 0.7) return 'exploder';
-    } else if (this.difficultyId === 'easy') {
-      if (roll < 0.12) return 'fast';
-      if (roll < 0.2) return 'spitter';
-      if (roll < 0.26) return 'tank';
-    } else {
-      if (roll < 0.18) return 'fast';
-      if (roll < 0.3) return 'spitter';
-      if (roll < 0.4) return 'tank';
-      if (roll < 0.48) return 'exploder';
+    if (this.wave > 0 && this.wave % difficulty.bossEvery === 0 && !this.bossSpawnedThisWave) {
+      this.bossSpawnedThisWave = true;
+      const bossPool = zombieTypesFor({ wave: this.wave, theme: this.theme?.id, boss: true });
+      return bossPool[Math.floor(rand(0, bossPool.length))]?.id || 'boss';
     }
-    return 'normal';
+    if (this.wave < difficulty.specialWave) return chance(0.7) ? 'normal' : 'walker';
+    const pool = zombieTypesFor({ wave: this.wave, theme: this.theme?.id, boss: false });
+    if (!pool.length) return 'normal';
+    const roll = Math.random();
+    const ranged = pool.filter((type) => type.kind === 'rival');
+    const heavy = pool.filter((type) => ['tank', 'shield', 'giant', 'heavyBrute', 'armored'].includes(type.id) || type.behavior === 'tank');
+    const quick = pool.filter((type) => ['runner', 'fast', 'dodger', 'charger', 'leaper', 'swarm'].includes(type.id) || ['dodger', 'charger', 'swarm'].includes(type.behavior));
+    const basic = pool.filter((type) => !ranged.includes(type) && !heavy.includes(type) && !quick.includes(type));
+    const rangedChance = this.difficultyId === 'hard' ? 0.24 : this.difficultyId === 'easy' ? 0.12 : 0.18;
+    const heavyChance = this.difficultyId === 'hard' ? 0.2 : this.difficultyId === 'easy' ? 0.1 : 0.15;
+    if (ranged.length && roll < rangedChance) return ranged[Math.floor(rand(0, ranged.length))].id;
+    if (heavy.length && roll < rangedChance + heavyChance) return heavy[Math.floor(rand(0, heavy.length))].id;
+    if (quick.length && roll < 0.68) return quick[Math.floor(rand(0, quick.length))].id;
+    return (basic.length ? basic : pool)[Math.floor(rand(0, (basic.length ? basic : pool).length))].id;
   }
 
   nextWave() {
     if (this.wave > 0) this.award({ score: 50, money: 30, label: 'Wave clear' });
     this.wave += 1;
+    this.bossSpawnedThisWave = false;
+    const previousTheme = this.theme?.id;
+    this.setTheme(themeForWave(this.wave).id);
     this.spawnQueue = Math.max(3, Math.round((5 + this.wave * 3 * this.difficulty().waveScale) * this.difficulty().spawnMultiplier));
     this.spawnTimer = 0.8;
-    this.addFloatingText(`Wave ${this.wave}`, this.player.x, this.player.y - 60, '#ffd166');
+    const themeChanged = previousTheme && previousTheme !== this.theme.id;
+    this.addFloatingText(themeChanged ? `Wave ${this.wave}: ${this.theme.label}` : `Wave ${this.wave}`, this.player.x, this.player.y - 60, '#ffd166');
+    this.syncBossMusic();
     if (this.wave > 1) this.pickups.push(this.createSafePickup());
     if (this.isMultiplayer() && this.multiplayer.isHost) {
       this.roomManager.updateRoom(this.multiplayer.room.id, { current_wave: this.wave }).catch((error) => {
@@ -762,6 +844,19 @@ export class Game {
         completedWave: this.wave > 1 ? this.wave - 1 : 0,
       }));
     }
+  }
+
+  setTheme(themeId) {
+    this.theme = THEMES.find((theme) => theme.id === themeId) || themeForWave(this.wave || 1);
+    this.world?.setTheme(this.theme);
+  }
+
+  hasBoss() {
+    return this.enemies.some((enemy) => !enemy.dead && enemy.isBoss);
+  }
+
+  syncBossMusic() {
+    this.audio.setMusic(this.theme?.music, this.hasBoss());
   }
 
   createSafePickup(type = null) {
@@ -796,7 +891,7 @@ export class Game {
           bullet.dead = true;
           this.burst(bullet.x, bullet.y, '#ffe66d', 5);
           this.addFloatingText(`-${damage}`, enemy.x, enemy.y - 20, '#fff6d1');
-          this.special.addCharge(0.012);
+          this.addSpecialChargeForHit(bullet, enemy);
           if (this.isMultiplayer() && this.multiplayer.isHost) {
             this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_HIT, nowPayload({
               zombieId: enemy.id,
@@ -837,6 +932,12 @@ export class Game {
         }));
       }
     }
+  }
+
+  addSpecialChargeForHit(bullet, enemy) {
+    if (bullet.weaponType === 'shotgun') this.special.addCharge(0.01);
+    else if (bullet.weaponType === 'rocket') this.special.addCharge(0.08);
+    else this.special.addCharge(enemy.typeId?.includes('boss') || enemy.isBoss ? 0.02 : 0.03);
   }
 
   damageForHit(bullet, target) {
@@ -899,10 +1000,12 @@ export class Game {
     }
     if (this.revive.update(dt)) {
       this.revive.revive();
-      this.player.health = this.player.maxHealth;
-      this.addFloatingText('REVIVED!', this.player.x, this.player.y - 62, '#7bed9f');
+      this.player.health = Math.ceil(this.player.maxHealth * 0.5);
+      this.weaponManager.resetToPistol();
+      this.addFloatingText('REVIVED! 50% HP', this.player.x, this.player.y - 62, '#7bed9f');
       this.audio.pickup();
       this.syncReviveState();
+      this.broadcastEconomy();
     }
   }
 
@@ -926,7 +1029,7 @@ export class Game {
     if (localKill) {
       this.award({ score: reward, money: moneyReward, label: enemy.label || 'Kill' });
       this.zombiesKilled += 1;
-      this.special.addCharge(enemy.typeId === 'boss' ? 0.2 : 0.06);
+      this.special.addCharge(enemy.isBoss || enemy.typeId?.includes('boss') ? 0.15 : 0.05);
     }
     if (this.isMultiplayer() && localKill) this.multiplayer.zombiesKilled += 1;
     this.audio.enemyDown();
@@ -962,6 +1065,41 @@ export class Game {
     this.particles = this.particles.filter((particle) => particle.life > 0);
     this.floaters = this.floaters.filter((text) => text.life > 0);
     this.specialRipples = this.specialRipples.filter((ripple) => ripple.life > 0 && ripple.radius < ripple.maxRadius);
+    this.specialRockets = this.specialRockets.filter((rocket) => !rocket.dead);
+  }
+
+  updateSpecialRockets(dt) {
+    for (const rocket of this.specialRockets) {
+      rocket.trail.push({ x: rocket.x, y: rocket.y, life: 0.22 });
+      rocket.trail.forEach((dot) => (dot.life -= dt));
+      rocket.trail = rocket.trail.filter((dot) => dot.life > 0);
+      const dx = rocket.targetX - rocket.x;
+      const dy = rocket.targetY - rocket.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 18) {
+        this.explodeSpecialRocket(rocket);
+        continue;
+      }
+      const step = Math.min(dist, rocket.speed * dt);
+      rocket.x += (dx / (dist || 1)) * step;
+      rocket.y += (dy / (dist || 1)) * step;
+    }
+  }
+
+  explodeSpecialRocket(rocket) {
+    rocket.dead = true;
+    this.specialRipples.push({ x: rocket.x, y: rocket.y, radius: 12, maxRadius: rocket.radius, life: 0.42 });
+    this.burst(rocket.x, rocket.y, '#b38cff', 18);
+    this.camera.addShake(9, 0.18);
+    this.audio.hit();
+    if (rocket.visualOnly) return;
+    for (const enemy of this.enemies) {
+      if (enemy.dead || distance(enemy, rocket) > rocket.radius + enemy.r) continue;
+      enemy.damage(rocket.damage);
+      enemy.flash = 0.25;
+      this.addFloatingText(`-${rocket.damage}`, enemy.x, enemy.y - 20, '#b38cff');
+      if (enemy.dead) this.killEnemy(enemy);
+    }
   }
 
   saveMultiplayerResult(survived) {
@@ -1017,11 +1155,39 @@ export class Game {
           downed: this.revive.isDowned,
         }
       : {});
+    this.drawSpecialRockets();
     this.drawSpecialRipples();
     this.particles.forEach((particle) => particle.draw(this.ctx));
     this.floaters.forEach((text) => text.draw(this.ctx));
     this.ctx.restore();
     this.drawVignette();
+    this.drawBossBar();
+  }
+
+  drawBossBar() {
+    const boss = this.enemies.find((enemy) => !enemy.dead && enemy.isBoss);
+    if (!boss) return;
+    const width = 360;
+    const height = 14;
+    const x = (this.canvas.width - width) / 2;
+    const y = this.canvas.height - 30;
+    const percent = Math.max(0, Math.min(1, boss.health / boss.maxHealth));
+    this.ctx.save();
+    this.ctx.fillStyle = 'rgba(11, 16, 20, 0.82)';
+    this.ctx.fillRect(x - 4, y - 14, width + 8, height + 22);
+    this.ctx.strokeStyle = '#2f3c45';
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(x - 4, y - 14, width + 8, height + 22);
+    this.ctx.fillStyle = '#fff6d1';
+    this.ctx.font = '10px monospace';
+    this.ctx.fillText(boss.label || 'Boss', x, y - 4);
+    this.ctx.fillStyle = '#2a1724';
+    this.ctx.fillRect(x, y, width, height);
+    this.ctx.fillStyle = '#ef476f';
+    this.ctx.fillRect(x, y, width * percent, height);
+    this.ctx.strokeStyle = '#111820';
+    this.ctx.strokeRect(x, y, width, height);
+    this.ctx.restore();
   }
 
   drawSpecialRipples() {
@@ -1033,6 +1199,23 @@ export class Game {
       this.ctx.beginPath();
       this.ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
       this.ctx.stroke();
+      this.ctx.restore();
+    }
+  }
+
+  drawSpecialRockets() {
+    for (const rocket of this.specialRockets) {
+      this.ctx.save();
+      for (const dot of rocket.trail) {
+        this.ctx.globalAlpha = Math.max(0, dot.life / 0.22) * 0.7;
+        this.ctx.fillStyle = '#ffd166';
+        this.ctx.fillRect(dot.x - 3, dot.y - 3, 6, 6);
+      }
+      this.ctx.globalAlpha = 1;
+      this.ctx.fillStyle = '#b38cff';
+      this.ctx.fillRect(rocket.x - 6, rocket.y - 4, 12, 8);
+      this.ctx.fillStyle = '#fff6d1';
+      this.ctx.fillRect(rocket.x + 2, rocket.y - 2, 5, 4);
       this.ctx.restore();
     }
   }

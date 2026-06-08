@@ -30,15 +30,15 @@ export class LevelManager {
   }
 
   damageMultiplier() {
-    return 1 + (this.level - 1) * 0.08;
+    return 1;
   }
 
-  fireRateMultiplier() {
-    return 1 + (this.level - 1) * 0.04;
+  damageBonus() {
+    return (this.level - 1) * 2;
   }
 
   specialMultiplier() {
-    return 1 + (this.level - 1) * 0.12;
+    return 1;
   }
 
   static scoreForLevel(level) {
@@ -46,4 +46,3 @@ export class LevelManager {
     return Math.round(25 * level * level + 25 * level - 50);
   }
 }
-

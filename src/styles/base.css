@@ -406,9 +406,57 @@ h1 {
 }
 
 .shop-menu {
+  position: relative;
   width: min(980px, calc(100% - 18px));
   max-height: calc(100svh - 24px);
   overflow: auto;
+}
+
+.shop-close {
+  position: sticky;
+  top: 0;
+  float: left;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin: -8px 10px 4px -8px;
+  border: 2px solid #2f3c45;
+  background: rgba(10, 15, 19, 0.9);
+  color: #fff6d1;
+  font: inherit;
+  font-size: 24px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shop-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 5px;
+  border: 2px solid #2f3c45;
+  background: rgba(10, 15, 19, 0.58);
+}
+
+.shop-tabs button {
+  min-height: 36px;
+  border: 2px solid transparent;
+  padding: 6px 12px;
+  background: transparent;
+  color: #c8d1d8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.shop-tabs button.is-active {
+  border-color: #111820;
+  background: #ffd166;
+  color: #101820;
 }
 
 .shop-grid {
@@ -429,6 +477,10 @@ h1 {
 
 .weapon-card.is-equipped {
   border-color: #ffd166;
+}
+
+.health-card {
+  border-color: #7bed9f;
 }
 
 .weapon-card h2 {
@@ -496,6 +548,25 @@ h1 {
   min-width: 58px;
 }
 
+.audio-button {
+  min-width: 50px;
+}
+
+.special-button {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff6d1;
+  background:
+    radial-gradient(circle at center, rgba(18, 28, 36, 0.96) 0 58%, transparent 59%),
+    conic-gradient(#b38cff var(--charge, 0%), rgba(179, 140, 255, 0.18) 0);
+  border-color: #b38cff;
+  text-shadow: 1px 1px #0b1014;
+}
+
 .special-button.is-ready {
   animation: special-ready 0.8s ease-in-out infinite alternate;
   box-shadow: 0 0 18px rgba(179, 140, 255, 0.8);
@@ -518,6 +589,26 @@ h1 {
 }
 
 .connection-copy {
+  color: #c8d1d8;
+}
+
+.downed-banner {
+  display: inline-grid;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 2px solid #9ee7ff;
+  background: rgba(10, 15, 19, 0.86);
+  color: #fff6d1;
+  pointer-events: none;
+}
+
+.downed-banner b {
+  color: #9ee7ff;
+}
+
+.downed-banner span {
+  font-size: 11px;
   color: #c8d1d8;
 }
 
@@ -658,7 +749,8 @@ h1 {
 
   .hud-row,
   .ability-row,
-  .multiplayer-hud {
+  .multiplayer-hud,
+  .downed-banner {
     gap: 4px;
   }
 
@@ -744,14 +836,19 @@ h1 {
     right: max(20px, env(safe-area-inset-right));
     bottom: max(146px, calc(env(safe-area-inset-bottom) + 146px));
     z-index: 9;
-    min-width: 62px;
-    min-height: 42px;
-    border-radius: 999px;
-    background: #b38cff;
+    width: clamp(58px, 13vw, 72px);
+    height: clamp(58px, 13vw, 72px);
+    min-width: 58px;
+    min-height: 58px;
+    font-size: 10px;
   }
 
   .shop-button {
     min-width: 42px;
+  }
+
+  .audio-button {
+    display: none;
   }
 
   .leave-button {
@@ -760,6 +857,11 @@ h1 {
 
   .ability-row {
     margin-top: 4px;
+  }
+
+  .downed-banner {
+    max-width: min(260px, 62vw);
+    font-size: 11px;
   }
 
   .empty-abilities {

@@ -42,6 +42,11 @@ export class WeaponManager {
     return true;
   }
 
+  resetToPistol({ clearAmmo = true } = {}) {
+    this.currentId = 'pistol';
+    if (clearAmmo) this.ammo.clear();
+  }
+
   currentAmmoFor(weaponId) {
     const weapon = getWeapon(weaponId);
     return weapon.ammo === Infinity ? Infinity : this.ammo.get(weapon.id) || 0;
