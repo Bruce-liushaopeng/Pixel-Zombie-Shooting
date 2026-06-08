@@ -5,18 +5,28 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 
 const PORT = Number(process.env.PORT || 3001);
-const CLIENT_ORIGINS = (process.env.CLIENT_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+const DEFAULT_CLIENT_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'https://pixel-zombie-shooting.netlify.app',
+];
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGINS || DEFAULT_CLIENT_ORIGINS.join(','))
   .split(',')
   .map((origin) => origin.trim())
+  .map((origin) => origin.replace(/\/$/, ''))
   .filter(Boolean);
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || CLIENT_ORIGINS.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+    const normalizedOrigin = origin?.replace(/\/$/, '');
+    if (!origin || CLIENT_ORIGINS.includes(normalizedOrigin) || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(normalizedOrigin)) {
       callback(null, true);
       return;
     }
     callback(new Error(`Origin not allowed by CORS: ${origin}`));
   },
+  methods: ['GET', 'POST'],
   credentials: true,
 };
 
