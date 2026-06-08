@@ -15,6 +15,10 @@ export class RemotePlayerState {
     this.money = 0;
     this.weapon = 'pistol';
     this.ammo = '∞';
+    this.isDowned = false;
+    this.reviveTimer = 0;
+    this.level = 1;
+    this.specialCharge = 0;
     this.r = 17;
     this.lastSeenAt = row.last_seen_at;
   }
@@ -121,7 +125,7 @@ export class MultiplayerState {
     this.remotePlayers.forEach((player) => player.update(dt));
   }
 
-  applyEconomy({ playerId, score, money, weapon, ammo, weaponPurchases }) {
+  applyEconomy({ playerId, score, money, weapon, ammo, weaponPurchases, level, specialCharge, isDowned, reviveTimer }) {
     if (playerId === this.localPlayerId) return;
     const remote = this.remotePlayers.get(playerId);
     if (!remote) return;
@@ -130,5 +134,22 @@ export class MultiplayerState {
     remote.weapon = weapon || remote.weapon;
     remote.ammo = ammo ?? remote.ammo;
     remote.weaponPurchases = Number(weaponPurchases ?? remote.weaponPurchases ?? 0);
+    remote.level = Number(this.valueOr(level, remote.level));
+    remote.specialCharge = Number(this.valueOr(specialCharge, remote.specialCharge));
+    remote.isDowned = Boolean(isDowned ?? remote.isDowned);
+    remote.reviveTimer = Number(reviveTimer ?? remote.reviveTimer);
+  }
+
+  valueOr(value, fallback) {
+    return value ?? fallback;
+  }
+
+  applyReviveState({ playerId, isDowned, reviveTimer = 0, health = null }) {
+    if (playerId === this.localPlayerId) return;
+    const remote = this.remotePlayers.get(playerId);
+    if (!remote) return;
+    remote.isDowned = Boolean(isDowned);
+    remote.reviveTimer = Number(reviveTimer || 0);
+    if (health !== null) remote.health = Number(health);
   }
 }

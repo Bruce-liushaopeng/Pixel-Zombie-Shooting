@@ -12,6 +12,7 @@ export class UI {
     this.onOpenShop = () => {};
     this.onCloseShop = () => {};
     this.onBuyWeapon = () => {};
+    this.onSpecial = () => {};
     this.onRestart = () => {};
     this.onResume = () => {};
   }
@@ -19,6 +20,7 @@ export class UI {
   renderHud(game) {
     const healthPercent = Math.max(0, game.player.health / game.player.maxHealth) * 100;
     const cooldown = Math.max(0, 1 - game.player.cooldown / game.player.fireDelay);
+    const level = game.levelManager?.progress(game.score) || { level: 1, earned: 0, next: 100, percent: 0 };
     const abilityTags = [...game.player.abilities.entries()]
       .map(([key, time]) => {
         const ability = ABILITIES[key];
@@ -34,11 +36,13 @@ export class UI {
       <div class="hud-row">
         <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
         <div class="stat stat-score">Score <b>${game.score}</b></div>
+        <div class="stat stat-level">Lv <b>${level.level}</b> <span>${game.score}/${level.next}</span></div>
         <div class="stat stat-money">$<b>${game.money}</b></div>
         <div class="stat stat-weapon">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
         <div class="stat stat-wave">W<b>${game.wave}</b></div>
         <div class="stat stat-zombies">Z<b>${game.zombiesRemaining?.() ?? game.enemies.length}</b></div>
         <div class="stat stat-mode">${game.modeLabel?.() || 'Single'} / ${game.difficultyLabel?.() || 'Medium'}</div>
+        <button class="hud-button special-button ${game.special?.canUse() ? 'is-ready' : ''}" type="button" data-action="special">Special ${game.special?.percent() ?? 0}%</button>
         <div class="cooldown"><span style="transform:scaleX(${cooldown})"></span><p>Fire</p></div>
         <button class="hud-button" type="button" data-action="shop">Shop</button>
         ${game.isMultiplayer?.() ? '<button class="hud-button" type="button" data-action="leave-room">Leave</button>' : ''}
@@ -52,6 +56,8 @@ export class UI {
       if (leaveButton) leaveButton.onclick = () => this.onLeaveRoom();
       const shopButton = this.hud.querySelector('[data-action="shop"]');
       if (shopButton) shopButton.onclick = () => this.onOpenShop();
+      const specialButton = this.hud.querySelector('[data-action="special"]');
+      if (specialButton) specialButton.onclick = () => this.onSpecial();
       this.lastHud = markup;
     }
   }
@@ -65,7 +71,12 @@ export class UI {
         const health = isLocal ? game.player.health : remote?.health ?? player.health ?? 100;
         const score = isLocal ? game.score : remote?.score ?? player.score ?? 0;
         const money = isLocal ? game.money : remote?.money ?? 0;
-        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Score ${score} $${money}</span>`;
+        const revive = isLocal && game.revive?.isDowned
+          ? ` Revive ${Math.ceil(game.revive.timer)}s`
+          : remote?.isDowned
+            ? ` Down ${Math.ceil(remote.reviveTimer)}s`
+            : '';
+        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Lv ${isLocal ? game.levelManager.level : remote?.level || 1} Score ${score} $${money}${revive}</span>`;
       })
       .join('');
     const status = game.multiplayer.statusMessage

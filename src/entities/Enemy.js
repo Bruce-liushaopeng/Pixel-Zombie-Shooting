@@ -49,7 +49,8 @@ export class Zombie extends Entity {
 export class Rival extends Entity {
   constructor(x, y, wave, typeId = 'spitter', difficulty = null) {
     const type = getZombieType(typeId === 'rival' ? 'spitter' : typeId);
-    const health = Math.round((type.health + wave * 5) * (difficulty?.healthMultiplier || 1));
+    const rangedHealthMultiplier = type.id === 'spitter' ? 0.62 : 1;
+    const health = Math.round((type.health + wave * 5) * rangedHealthMultiplier * (difficulty?.healthMultiplier || 1));
     super({ x, y, r: type.radius, health });
     this.typeId = type.id;
     this.label = type.label;

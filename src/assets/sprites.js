@@ -4,6 +4,7 @@ export function drawPlayer(ctx, entity, options = {}) {
   const shirt = options.shirt || '#4cc9a7';
   const glow = options.glow || null;
   ctx.save();
+  if (options.downed) ctx.globalAlpha = 0.48;
   ctx.translate(entity.x, entity.y);
   ctx.rotate(entity.angle);
   if (glow) {

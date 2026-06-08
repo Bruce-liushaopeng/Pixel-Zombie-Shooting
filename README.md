@@ -47,6 +47,8 @@ Before starting, choose Easy, Medium, or Hard. Difficulty changes zombie counts,
 - Multiplayer Co-op: two players fight zombies together, with friendly fire disabled
 - Multiplayer PvP: two players can damage each other while zombies remain an environmental threat
 
+Players also level up from score. Leveling restores HP, increases weapon damage, slightly improves fire rate, and makes the special ability stronger.
+
 ## Shop and weapons
 
 Press `B` or click/tap Shop during a run. In single-player the shop pauses the game; in multiplayer the game continues while shopping.
@@ -61,6 +63,12 @@ Score and money are separate. Score is your final performance value and is never
 - Rocket Launcher: slow arcade area-damage shots, limited ammo
 
 When a limited-ammo weapon runs dry, the player automatically switches back to the Starter Pistol.
+
+## Special ability and revive
+
+The special ability charges over time and from combat. Press `Q`, Space, or tap the Special button on mobile to release a radial shockwave that damages nearby enemies.
+
+In Multiplayer Co-op, one downed player does not immediately end the run. If the teammate is still alive, the downed player revives after a short countdown while keeping score, money, level, weapon, and ammo. If both players are down at the same time, the co-op run ends.
 
 ## Multiplayer
 
@@ -100,6 +108,9 @@ This is a playable prototype using Supabase Realtime and database events. For a 
 - Co-op and PvP multiplayer modes
 - Weapon shop with ammo-limited purchased weapons
 - Separate score and money economy, so shop spending does not reduce final score
+- Score-based level progression with level-up healing and weapon scaling
+- Charged radial special ability
+- Co-op downed/revive flow
 - Zombie variety: normal, fast, tank, spitter, exploder, and boss enemies
 - Two enemy types:
   - Zombie: slow chaser with contact damage

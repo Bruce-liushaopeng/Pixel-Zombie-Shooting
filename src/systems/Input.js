@@ -8,6 +8,7 @@ export class Input {
     this.mouse = { x: 0, y: 0, down: false, pressed: false };
     this.pausePressed = false;
     this.shopPressed = false;
+    this.specialPressed = false;
     this.mobile = new MobileControls(this.frame);
     this.lastMobileAim = { x: 1, y: 0 };
 
@@ -15,6 +16,7 @@ export class Input {
       this.keys.add(event.key.toLowerCase());
       if (event.key.toLowerCase() === 'p' || event.key === 'Escape') this.pausePressed = true;
       if (event.key.toLowerCase() === 'b') this.shopPressed = true;
+      if (event.key === ' ' || event.key.toLowerCase() === 'q') this.specialPressed = true;
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.key.toLowerCase()));
 
@@ -82,5 +84,6 @@ export class Input {
     this.mouse.pressed = false;
     this.pausePressed = false;
     this.shopPressed = false;
+    this.specialPressed = false;
   }
 }

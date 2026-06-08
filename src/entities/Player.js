@@ -47,6 +47,8 @@ export class Player extends Entity {
     return {
       x: this.x + dir.x * 24,
       y: this.y + dir.y * 24,
+      sourceX: this.x,
+      sourceY: this.y,
       vx: dir.x * (weapon?.speed || 720),
       vy: dir.y * (weapon?.speed || 720),
       r: weapon?.radius || (this.hasAbility('big') ? 8 : 5),
