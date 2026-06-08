@@ -24,6 +24,7 @@ export class Zombie extends Entity {
     this.path = [];
     this.pathTimer = Math.random() * 0.5;
     this.pathRecheck = 0.35 + Math.random() * 0.35;
+    this.bossSpecialTimer = this.isBoss ? 2.6 + Math.random() * 1.8 : 0;
   }
 
   update(dt, game) {
@@ -70,7 +71,19 @@ export class Zombie extends Entity {
     } else if (target.isTower && target.towerRef && distance(this, target) < this.r + target.r) {
       game.damageTower(target.towerRef, this.attackDamage * dt * 1.7);
     }
+    this.updateBossSpecial(dt, game, target);
     this.updateBase(dt);
+  }
+
+  updateBossSpecial(dt, game, target) {
+    if (!this.isBoss || !target || this.dead) return;
+    this.bossSpecialTimer -= dt;
+    if (this.bossSpecialTimer > 0) return;
+    this.bossSpecialTimer = 4.4 + Math.random() * 2.1;
+    const roll = Math.random();
+    if (roll < 0.34) game.spawnBossBulletFan?.(this, target);
+    else if (roll < 0.67) game.throwBossZombie?.(this, target);
+    else game.createBossFireWall?.(this, target);
   }
 
   pathDirection(dt, game, target) {
@@ -114,6 +127,7 @@ export class Rival extends Entity {
     this.angle = 0;
     this.path = [];
     this.pathTimer = Math.random() * 0.45;
+    this.bossSpecialTimer = this.isBoss ? 2.2 + Math.random() * 1.4 : 0;
   }
 
   update(dt, game) {
@@ -152,7 +166,19 @@ export class Rival extends Entity {
         game.spawnEnemyNear(this.x, this.y, 'weak');
       }
     }
+    this.updateBossSpecial(dt, game, target, canShootTarget);
     this.updateBase(dt);
+  }
+
+  updateBossSpecial(dt, game, target, canSeeTarget = true) {
+    if (!this.isBoss || !target || this.dead) return;
+    this.bossSpecialTimer -= dt;
+    if (this.bossSpecialTimer > 0) return;
+    this.bossSpecialTimer = 3.8 + Math.random() * 1.9;
+    const roll = Math.random();
+    if (roll < 0.45 && canSeeTarget) game.spawnBossBulletFan?.(this, target);
+    else if (roll < 0.72) game.throwBossZombie?.(this, target);
+    else game.createBossFireWall?.(this, target);
   }
 
   hasLineOfSight(game, target) {

@@ -1,6 +1,6 @@
 import { Camera } from './Camera.js';
 import { GAME_STATE, WORLD, ABILITIES } from './constants.js';
-import { chance, distance, rand } from './math.js';
+import { chance, circleRectCollision, distance, normalize, rand } from './math.js';
 import { World } from './World.js';
 import { drawBullet, drawPickup, drawPlayer, drawRival, drawTower, drawZombie } from '../assets/sprites.js';
 import { Bullet } from '../entities/Bullet.js';
@@ -123,6 +123,8 @@ export class Game {
     this.revive = new ReviveManager();
     this.specialRipples = [];
     this.specialRockets = [];
+    this.bossHazards = [];
+    this.thrownZombies = [];
     this.wave = 0;
     this.bossSpawnedThisWave = false;
     this.spawnQueue = 0;
@@ -628,6 +630,7 @@ export class Game {
       ripple.radius += dt * 520;
     });
     this.updateSpecialRockets(dt);
+    this.updateBossEffects(dt);
     this.multiplayer.updateRemotePlayers(dt);
     this.camera.follow(this.player, dt);
 
@@ -1341,6 +1344,132 @@ export class Game {
     this.floaters = this.floaters.filter((text) => text.life > 0);
     this.specialRipples = this.specialRipples.filter((ripple) => ripple.life > 0 && ripple.radius < ripple.maxRadius);
     this.specialRockets = this.specialRockets.filter((rocket) => !rocket.dead);
+    this.bossHazards = this.bossHazards.filter((hazard) => hazard.life > 0);
+    this.thrownZombies = this.thrownZombies.filter((thrown) => !thrown.dead);
+  }
+
+  spawnBossBulletFan(boss, target) {
+    if (!boss || !target) return;
+    const base = Math.atan2(target.y - boss.y, target.x - boss.x);
+    const count = boss.typeId === 'finalMutantBoss' ? 13 : boss.typeId === 'rangedBoss' ? 11 : 9;
+    const spread = boss.typeId === 'rangedBoss' ? 1.15 : 0.9;
+    const damage = Math.max(6, Math.round(boss.attackDamage * 0.48));
+    for (let i = 0; i < count; i++) {
+      const offset = count === 1 ? 0 : -spread / 2 + (spread / (count - 1)) * i;
+      const angle = base + offset;
+      this.spawnBullet({
+        x: boss.x + Math.cos(angle) * (boss.r + 8),
+        y: boss.y + Math.sin(angle) * (boss.r + 8),
+        vx: Math.cos(angle) * 380,
+        vy: Math.sin(angle) * 380,
+        r: 5,
+        damage,
+        friendly: false,
+        life: 1.85,
+        color: boss.color || '#ef476f',
+      });
+    }
+    this.addFloatingText('BULLET FAN', boss.x, boss.y - boss.r - 20, '#ffd166');
+    this.burst(boss.x, boss.y, boss.color || '#ef476f', 10);
+  }
+
+  throwBossZombie(boss, target) {
+    if (!boss || !target) return;
+    const dir = normalize(target.x - boss.x, target.y - boss.y);
+    const typeId = boss.typeId === 'summonerBoss' || boss.typeId === 'finalMutantBoss' ? 'swarm' : 'weak';
+    const speed = boss.typeId === 'angryBoss' ? 520 : 460;
+    this.thrownZombies.push({
+      x: boss.x + dir.x * (boss.r + 12),
+      y: boss.y + dir.y * (boss.r + 12),
+      vx: dir.x * speed,
+      vy: dir.y * speed,
+      r: 13,
+      life: 0.9,
+      maxLife: 0.9,
+      typeId,
+      damage: Math.max(8, Math.round(boss.attackDamage * 0.7)),
+      color: '#c7f9cc',
+      spin: rand(0, Math.PI * 2),
+    });
+    this.addFloatingText('THROW!', boss.x, boss.y - boss.r - 20, '#c7f9cc');
+    this.camera.addShake(5, 0.12);
+  }
+
+  createBossFireWall(boss, target) {
+    if (!boss || !target) return;
+    const dir = normalize(target.x - boss.x, target.y - boss.y);
+    const side = { x: -dir.y, y: dir.x };
+    const center = {
+      x: Math.max(90, Math.min(WORLD.width - 90, target.x + dir.x * 36)),
+      y: Math.max(90, Math.min(WORLD.height - 90, target.y + dir.y * 36)),
+    };
+    const segments = boss.typeId === 'finalMutantBoss' ? 7 : 5;
+    const spacing = 42;
+    for (let i = 0; i < segments; i++) {
+      const index = i - (segments - 1) / 2;
+      const x = center.x + side.x * index * spacing;
+      const y = center.y + side.y * index * spacing;
+      if (isBlocked(x, y, 14, this.world)) continue;
+      this.bossHazards.push({
+        x: x - 18,
+        y: y - 18,
+        w: 36,
+        h: 36,
+        life: 3.6,
+        maxLife: 3.6,
+        tick: 0,
+        damage: Math.max(5, Math.round(boss.attackDamage * 0.28)),
+        color: boss.typeId === 'rangedBoss' ? '#b38cff' : '#ff7b00',
+      });
+    }
+    this.addFloatingText('FIRE WALL', center.x, center.y - 34, '#ffba08');
+  }
+
+  updateBossEffects(dt) {
+    for (const hazard of this.bossHazards) {
+      hazard.life -= dt;
+      hazard.tick -= dt;
+      if (hazard.tick <= 0 && circleRectCollision(this.player, hazard)) {
+        hazard.tick = 0.45;
+        if (this.player.hurt(hazard.damage)) {
+          this.camera.addShake(4, 0.1);
+          this.audio.hit();
+          this.addFloatingText(`-${hazard.damage}`, this.player.x, this.player.y - 26, '#ffba08');
+        }
+      }
+    }
+
+    for (const thrown of this.thrownZombies) {
+      thrown.life -= dt;
+      thrown.spin += dt * 12;
+      thrown.x += thrown.vx * dt;
+      thrown.y += thrown.vy * dt;
+      thrown.vx *= 0.985;
+      thrown.vy *= 0.985;
+      if (isBlocked(thrown.x, thrown.y, thrown.r, this.world)) {
+        this.landThrownZombie(thrown);
+        continue;
+      }
+      if (distance(thrown, this.player) < thrown.r + this.player.r) {
+        if (this.player.hurt(thrown.damage)) {
+          this.camera.addShake(8, 0.15);
+          this.audio.hit();
+          this.addFloatingText(`-${thrown.damage}`, this.player.x, this.player.y - 28, '#ef476f');
+        }
+        this.landThrownZombie(thrown);
+        continue;
+      }
+      if (thrown.life <= 0) this.landThrownZombie(thrown);
+    }
+  }
+
+  landThrownZombie(thrown) {
+    if (!thrown || thrown.dead) return;
+    thrown.dead = true;
+    this.burst(thrown.x, thrown.y, thrown.color || '#c7f9cc', 8);
+    if (!isBlocked(thrown.x, thrown.y, thrown.r, this.world)) {
+      this.enemies.push(this.createEnemy(thrown.x, thrown.y, thrown.typeId || 'weak'));
+    }
   }
 
   updateSpecialRockets(dt) {
@@ -1410,9 +1539,11 @@ export class Game {
     this.ctx.save();
     this.camera.apply(this.ctx);
     this.world.draw(this.ctx, this.camera);
+    this.drawBossHazards();
     this.pickups.forEach((pickup) => drawPickup(this.ctx, pickup));
     this.towers.forEach((tower) => drawTower(this.ctx, tower));
     this.bullets.forEach((bullet) => drawBullet(this.ctx, bullet));
+    this.drawThrownZombies();
     this.enemies
       .slice()
       .sort((a, b) => a.y - b.y)
@@ -1525,6 +1656,40 @@ export class Game {
       this.ctx.beginPath();
       this.ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
       this.ctx.stroke();
+      this.ctx.restore();
+    }
+  }
+
+  drawBossHazards() {
+    for (const hazard of this.bossHazards) {
+      const alpha = Math.max(0, Math.min(1, hazard.life / hazard.maxLife));
+      const pulse = 0.65 + Math.sin(this.frame * 0.35) * 0.25;
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.28 + alpha * 0.34;
+      this.ctx.fillStyle = hazard.color || '#ff7b00';
+      this.ctx.fillRect(hazard.x, hazard.y, hazard.w, hazard.h);
+      this.ctx.globalAlpha = 0.18 + pulse * 0.22;
+      this.ctx.fillStyle = '#ffd166';
+      this.ctx.fillRect(hazard.x + 6, hazard.y + 6, hazard.w - 12, hazard.h - 12);
+      this.ctx.globalAlpha = 1;
+      this.ctx.strokeStyle = '#2a1724';
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(hazard.x, hazard.y, hazard.w, hazard.h);
+      this.ctx.restore();
+    }
+  }
+
+  drawThrownZombies() {
+    for (const thrown of this.thrownZombies) {
+      this.ctx.save();
+      this.ctx.translate(thrown.x, thrown.y);
+      this.ctx.rotate(thrown.spin);
+      this.ctx.fillStyle = '#101417';
+      this.ctx.fillRect(-thrown.r, -thrown.r, thrown.r * 2, thrown.r * 2);
+      this.ctx.fillStyle = thrown.color || '#c7f9cc';
+      this.ctx.fillRect(-thrown.r + 3, -thrown.r + 3, thrown.r * 2 - 6, thrown.r * 2 - 6);
+      this.ctx.fillStyle = '#ef476f';
+      this.ctx.fillRect(-4, -thrown.r - 2, 8, 4);
       this.ctx.restore();
     }
   }
