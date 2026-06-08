@@ -13,14 +13,32 @@ Open the local URL Vite prints in your terminal.
 
 ## Environment variables
 
-Multiplayer uses Supabase Realtime. Create a `.env` file with:
+Multiplayer live gameplay uses the Socket.IO game server. Supabase is kept for persistence only, such as `game_results` and future leaderboard/history reads. Create a `.env` file with:
 
 ```bash
+VITE_GAME_SERVER_URL=http://localhost:3001
 VITE_SUPABASE_URL=your-supabase-project-url
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
-The project expects the existing `rooms`, `room_players`, `room_events`, and `game_results` tables to already exist in Supabase with Realtime enabled.
+Single-player does not require the Socket.IO server or Supabase. Multiplayer requires the game server. Supabase is no longer used for movement, shooting, zombie state, damage, special ability, revive countdown, boss state, or live room events.
+
+## Realtime game server
+
+Run the frontend and server in separate terminals:
+
+```bash
+npm install
+npm run dev
+```
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+The local game server runs at `http://localhost:3001`. You can also use `npm run dev:server` from the project root.
 
 ## Desktop controls
 
@@ -79,28 +97,39 @@ In Multiplayer Co-op, one downed player does not immediately end the run. If the
 
 ## Multiplayer
 
-The game includes a prototype two-player online room mode using Supabase Realtime.
+The game includes a two-player online room mode using a dedicated Node.js + Socket.IO server for fast gameplay events.
 
 - Main menu: choose Single Player or Multiplayer
 - Multiplayer: choose Co-op or PvP, enter a player name and room code, then Join / Create Room
 - First player creates the room and becomes host
 - Second connected player joins slot 2 and starts the match automatically
 - Host owns shared wave, zombie, and pickup sync
-- Both players send throttled position updates and immediate shooting events
+- Both players send throttled position/input updates and immediate shooting events to Socket.IO
 - Remote players are interpolated and drawn with different colors and name labels
 - Shot events include weapon type so different bullet styles sync across clients
-- PvP hit and player-died events are sent through `room_events`
+- PvP hit, revive, special rocket, zombie, boss, wave, and game-over events are sent through the game server
+- Final multiplayer results are still saved to Supabase `game_results` when configured
 
 To test multiplayer:
 
-1. Start the dev server with `npm run dev`.
-2. Open the game in two browser tabs, two windows, or a desktop browser plus a phone on the same dev URL.
-3. Click Multiplayer in both clients.
-4. Enter different player names and the same room code.
-5. Join from player 1, then player 2.
-6. The lobby should show both players, then both clients should enter the match.
+1. Start the Socket.IO server with `npm run dev:server` or `cd server && npm run dev`.
+2. Start the Vite frontend with `npm run dev`.
+3. Open the game in two browser tabs, two windows, or a desktop browser plus a phone on the same dev URL.
+4. Click Multiplayer in both clients.
+5. Enter different player names and the same room code.
+6. Join from player 1, then player 2.
+7. The lobby should show both players, then both clients should enter the match.
 
-This is a playable prototype using Supabase Realtime and database events. For a serious production action game, a dedicated authoritative WebSocket game server would be a better fit.
+The server stores active room state in memory. Restarting the server clears active rooms, but does not affect persisted Supabase results.
+
+## Production deployment
+
+- Deploy the Vite frontend to Netlify.
+- Deploy `server/` to a Node host such as Render, Railway, or Fly.io.
+- Set `CLIENT_ORIGINS` on the server to your Netlify site URL.
+- Set `VITE_GAME_SERVER_URL` in Netlify to the deployed game server URL.
+- Keep Supabase env vars in Netlify for final result saving and leaderboard persistence.
+- Redeploy Netlify after changing env vars.
 
 ## Features
 
@@ -110,7 +139,7 @@ This is a playable prototype using Supabase Realtime and database events. For a 
 - Procedural buildings, roads, crates, cars, barrels, fences, floor cracks, grass, and shadows
 - Player movement, mouse aiming, shooting, collision, health, score, and wave progression
 - Mobile twin-stick movement, aiming, and auto-fire controls
-- Two-player Supabase Realtime room mode with lobby, remote player sync, and host-authority shared waves
+- Two-player Socket.IO room mode with lobby, remote player sync, and host-authority shared waves
 - Easy, Medium, and Hard difficulty selection
 - Co-op and PvP multiplayer modes
 - Weapon shop with ammo-limited purchased weapons
@@ -163,8 +192,15 @@ src/
   multiplayer/
     MultiplayerState.js
     NetworkEvents.js
-    RealtimeManager.js
     RoomManager.js
+  network/
+    MultiplayerGameClient.js
+    SocketRoomManager.js
+    socketClient.js
+server/
+  index.js
+  package.json
+  README.md
   systems/
     Audio.js
     Collision.js

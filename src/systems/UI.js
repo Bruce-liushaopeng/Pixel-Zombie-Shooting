@@ -168,7 +168,7 @@ export class UI {
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
       <div class="menu multiplayer-menu">
-        <p class="eyebrow">Supabase realtime</p>
+        <p class="eyebrow">Socket.IO realtime</p>
         <h1>${mode === 'pvp' ? 'PvP Room' : 'Co-op Room'}</h1>
         <p>Join or create a two-player room. Mode: ${this.escape(mode.toUpperCase())}. Difficulty: ${this.escape(difficulty)}.</p>
         <form class="multiplayer-form">

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "npm --prefix server run dev",
+    "dev:all": "npm run dev:server & npm run dev",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -12,6 +14,7 @@
     "vite": "^5.4.11"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.107.0"
+    "@supabase/supabase-js": "^2.107.0",
+    "socket.io-client": "^4.8.3"
   }
 }

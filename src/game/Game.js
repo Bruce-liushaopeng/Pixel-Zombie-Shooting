@@ -15,7 +15,6 @@ import { UI } from '../systems/UI.js';
 import { supabase } from '../lib/supabaseClient.js';
 import { MultiplayerState } from '../multiplayer/MultiplayerState.js';
 import { NETWORK_EVENTS, nowPayload } from '../multiplayer/NetworkEvents.js';
-import { RealtimeManager } from '../multiplayer/RealtimeManager.js';
 import { RoomManager } from '../multiplayer/RoomManager.js';
 import { getDifficulty } from './DifficultyManager.js';
 import { getGameMode, getModeFromRoomMode } from './GameModeManager.js';
@@ -48,7 +47,6 @@ export class Game {
     this.ui.onRestart = () => this.start();
     this.ui.onResume = () => this.setState(GAME_STATE.PLAYING);
     this.roomManager = new RoomManager(supabase);
-    this.realtime = new RealtimeManager(supabase);
     this.multiplayer = new MultiplayerState();
     this.mode = 'single';
     this.roomMode = 'single_player';
@@ -121,7 +119,7 @@ export class Game {
     this.mode = 'single';
     this.roomMode = 'single_player';
     this.difficultyId = difficulty;
-    this.realtime.unsubscribe();
+    this.roomManager.unsubscribe();
     this.multiplayer.reset();
     this.audio.resume();
     this.reset();
@@ -151,7 +149,7 @@ export class Game {
       this.multiplayer.configure(session);
       this.roomMode = this.multiplayer.roomMode;
       this.difficultyId = this.multiplayer.difficulty;
-      this.subscribeToRoom(session.room.id);
+      this.subscribeToRoom();
       if (session.room.status === 'playing' || this.multiplayer.connectedPlayers().length >= 2) this.startMultiplayerGame();
       else this.renderWaitingRoom();
     } catch (error) {
@@ -159,19 +157,20 @@ export class Game {
     }
   }
 
-  subscribeToRoom(roomId) {
-    this.realtime.subscribe({
-      roomId,
+  subscribeToRoom() {
+    this.roomManager.subscribe({
       onRoom: (room) => this.handleRoomChange(room),
-      onPlayers: () => this.refreshRoomPlayers(),
+      onPlayers: (players) => this.refreshRoomPlayers(players),
       onEvent: (event) => this.handleNetworkEvent(event),
+      onSnapshot: (snapshot) => this.handleStateSnapshot(snapshot),
       onError: (message) => {
         this.multiplayer.statusMessage = message;
+        if (!this.multiplayer.active) this.showMultiplayerMenu({ mode: this.roomMode, difficulty: this.difficultyId, error: message });
       },
     });
   }
 
-  async refreshRoomPlayers() {
+  async refreshRoomPlayers(nextPlayers = null) {
     if (!this.multiplayer.room) return;
     try {
       const previouslyConnected = new Set(
@@ -179,7 +178,7 @@ export class Game {
           .filter((player) => player.isConnected)
           .map((player) => player.playerId),
       );
-      const players = await this.roomManager.fetchPlayers(this.multiplayer.room.id);
+      const players = nextPlayers || await this.roomManager.fetchPlayers(this.multiplayer.room.id);
       this.multiplayer.applyPlayers(players);
       const stillConnected = new Set(
         players
@@ -242,7 +241,6 @@ export class Game {
   async leaveRoom() {
     if (this.isMultiplayer()) {
       await this.roomManager.leaveRoom(this.multiplayer.room?.id);
-      this.realtime.unsubscribe();
     }
     this.mode = 'single';
     this.multiplayer.reset();
@@ -631,6 +629,13 @@ export class Game {
       this.multiplayer.statusMessage = 'Room game over.';
       this.setState(GAME_STATE.GAME_OVER);
     }
+  }
+
+  handleStateSnapshot(snapshot = {}) {
+    if (!this.isMultiplayer()) return;
+    if (snapshot.room) this.handleRoomChange(snapshot.room);
+    if (snapshot.players) this.multiplayer.applyPlayers(snapshot.players);
+    if (snapshot.state && !this.multiplayer.isHost) this.applySyncState(snapshot.state);
   }
 
   syncMultiplayer() {
