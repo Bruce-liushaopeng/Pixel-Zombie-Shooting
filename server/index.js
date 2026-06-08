@@ -52,6 +52,8 @@ const DIRECT_EVENT_NAMES = new Map([
   ['zombie_killed', 'zombie_killed'],
   ['theme_changed', 'theme_changed'],
   ['game_over', 'game_over'],
+  ['pickup_collected', 'pickup_collected'],
+  ['player_shoot', 'player_shoot'],
 ]);
 
 function normalizeRoomCode(roomCode) {
@@ -315,13 +317,16 @@ io.on('connection', (socket) => {
   socket.on('game_event', (payload = {}) => {
     const room = rooms.get(socket.data.roomCode || normalizeRoomCode(payload.roomCode));
     if (!room) return;
-      const event = makeEvent(socket, room, payload.eventType, payload.payload || {});
-    if (payload.eventType === 'sync_state') {
+    const event = makeEvent(socket, room, payload.eventType, payload.payload || {});
+    if (payload.eventType === 'sync_state' && isSharedStatePayload(payload.payload)) {
       room.gameState = {
         ...room.gameState,
         ...(payload.payload || {}),
         status: room.status,
       };
+    }
+    if (payload.eventType === 'pickup_collected' && payload.payload?.pickupId) {
+      room.gameState.pickups = (room.gameState.pickups || []).filter((pickup) => pickup.id !== payload.payload.pickupId);
     }
     socket.to(room.roomCode).emit('game_event', event);
     const directEventName = DIRECT_EVENT_NAMES.get(payload.eventType);
@@ -350,6 +355,10 @@ io.on('connection', (socket) => {
     leaveSocketRoom(socket);
   });
 });
+
+function isSharedStatePayload(payload = {}) {
+  return !payload.playerEconomy && !payload.reviveState && !payload.specialUsed;
+}
 
 function leaveSocketRoom(socket) {
   const room = rooms.get(socket.data.roomCode);

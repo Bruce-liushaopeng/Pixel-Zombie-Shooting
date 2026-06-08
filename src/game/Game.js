@@ -538,7 +538,7 @@ export class Game {
     this.weaponManager.consumeAmmo();
     specs.forEach((spec) => this.spawnBullet(spec));
     this.audio.shoot();
-    if (this.isMultiplayer()) this.sendShootEvent(mouseWorld, weapon);
+    if (this.isMultiplayer()) this.sendShootEvent(mouseWorld, weapon, specs);
   }
 
   spawnBullet(spec) {
@@ -553,7 +553,7 @@ export class Game {
     };
   }
 
-  sendShootEvent(aimWorld, weapon) {
+  sendShootEvent(aimWorld, weapon, specs = []) {
     const angle = Math.atan2(aimWorld.y - this.player.y, aimWorld.x - this.player.x);
     this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.PLAYER_SHOOT, nowPayload({
       x: this.player.x,
@@ -562,12 +562,45 @@ export class Game {
       weaponType: weapon.id,
       damage: weapon.damage,
       bulletId: crypto.randomUUID(),
+      bullets: specs.map((spec) => ({
+        x: spec.x,
+        y: spec.y,
+        sourceX: spec.sourceX,
+        sourceY: spec.sourceY,
+        vx: spec.vx,
+        vy: spec.vy,
+        r: spec.r,
+        damage: spec.damage,
+        weaponType: spec.weaponType,
+        color: spec.color,
+        area: spec.area || 0,
+      })),
     }));
   }
 
   spawnRemoteShot(event) {
     if (event.player_id === this.multiplayer.localPlayerId) return;
     const payload = event.payload || {};
+    if (Array.isArray(payload.bullets) && payload.bullets.length) {
+      payload.bullets.forEach((spec) => this.spawnBullet({
+        x: Number(spec.x),
+        y: Number(spec.y),
+        sourceX: Number(spec.sourceX ?? payload.x),
+        sourceY: Number(spec.sourceY ?? payload.y),
+        vx: Number(spec.vx),
+        vy: Number(spec.vy),
+        r: Number(spec.r || 5),
+        damage: Number(spec.damage || payload.damage || 1),
+        friendly: true,
+        ownerId: event.player_id,
+        bulletId: payload.bulletId,
+        weaponType: spec.weaponType || payload.weaponType || 'pistol',
+        color: spec.color,
+        area: Number(spec.area || 0),
+      }));
+      this.audio.shoot();
+      return;
+    }
     const weapon = getWeapon(payload.weaponType || 'pistol');
     const dir = { x: Math.cos(payload.angle || 0), y: Math.sin(payload.angle || 0) };
     for (let i = 0; i < weapon.pellets; i++) {
@@ -590,11 +623,30 @@ export class Game {
         area: weapon.area || 0,
       });
     }
+    this.audio.shoot();
+  }
+
+  applyRemotePickup(event) {
+    if (event.player_id === this.multiplayer.localPlayerId) return;
+    const payload = event.payload || {};
+    const pickup = this.pickups.find((item) => item.id === payload.pickupId);
+    if (!pickup) return;
+    pickup.dead = true;
+    this.burst(pickup.x, pickup.y, pickup.color, 8);
+    const remote = this.multiplayer.remotePlayers.get(payload.playerId || event.player_id);
+    if (remote) {
+      const label = payload.pickupType === 'health'
+        ? '+HP'
+        : ABILITIES[payload.pickupType]?.label || 'Pickup';
+      this.addFloatingText(label, remote.x, remote.y - 42, payload.pickupType === 'health' ? '#7bed9f' : ABILITIES[payload.pickupType]?.color || '#ffd166');
+    }
+    this.audio.pickup();
   }
 
   handleNetworkEvent(event) {
     if (!this.isMultiplayer() || !this.multiplayer.markEventSeen(event.id)) return;
     if (event.event_type === NETWORK_EVENTS.PLAYER_SHOOT) this.spawnRemoteShot(event);
+    if (event.event_type === NETWORK_EVENTS.PICKUP_COLLECTED) this.applyRemotePickup(event);
     if (event.event_type === NETWORK_EVENTS.PLAYER_HIT && event.player_id !== this.multiplayer.localPlayerId) {
       const payload = event.payload || {};
       if (payload.shooterPlayerId === this.multiplayer.localPlayerId) {
@@ -619,7 +671,7 @@ export class Game {
       if (payload.completedWave) this.award({ score: 50, money: 30, label: 'Wave clear' });
     }
     if (event.event_type === NETWORK_EVENTS.SYNC_STATE) {
-      if (event.payload?.playerEconomy) this.applySyncState(event.payload);
+      if (event.payload?.playerEconomy || event.payload?.reviveState || event.payload?.specialUsed) this.applySyncState(event.payload);
       else if (!this.multiplayer.isHost) this.applySyncState(event.payload);
     }
     if (event.event_type === NETWORK_EVENTS.PLAYER_LEFT && event.player_id !== this.multiplayer.localPlayerId) {
