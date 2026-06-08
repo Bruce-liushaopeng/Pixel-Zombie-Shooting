@@ -62,7 +62,7 @@ export const ZOMBIE_TYPES = {
   boss: {
     id: 'boss',
     label: 'Boss',
-    health: 50,
+    health: 400,
     speed: 0.45,
     damage: 25,
     reward: 100,
