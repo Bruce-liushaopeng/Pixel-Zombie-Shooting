@@ -120,20 +120,23 @@ export class Rival extends Entity {
     const target = game.nearestLivingPlayer(this);
     if (!target) return;
     const dist = distance(this, target);
-    const dir = this.rangedDirection(dt, game, target, dist);
-    const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
+    const canSeeTarget = this.hasLineOfSight(game, target);
+    const dir = this.rangedDirection(dt, game, target, dist, canSeeTarget);
+    const desired = canSeeTarget ? (dist < 250 ? -1 : dist > 380 ? 1 : 0) : 1;
     this.x += dir.x * this.speed * desired * dt;
     this.y += dir.y * this.speed * desired * dt;
     resolveWorldCollisions(this, game.world);
-    this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+    const canShootTarget = this.hasLineOfSight(game, target);
+    const aimDir = normalize(target.x - this.x, target.y - this.y);
+    this.angle = Math.atan2(aimDir.y, aimDir.x);
     this.shootTimer -= dt;
-    if (this.shootTimer <= 0 && dist < 680) {
+    if (this.shootTimer <= 0 && dist < 680 && canShootTarget) {
       this.shootTimer = (this.isBoss ? 0.9 : 1.45) + Math.random() * 0.7;
       game.spawnBullet({
-        x: this.x + dir.x * 24,
-        y: this.y + dir.y * 24,
-        vx: dir.x * 440,
-        vy: dir.y * 440,
+        x: this.x + aimDir.x * 24,
+        y: this.y + aimDir.y * 24,
+        vx: aimDir.x * 440,
+        vy: aimDir.y * 440,
         r: 5,
         damage: this.attackDamage,
         friendly: false,
@@ -152,11 +155,16 @@ export class Rival extends Entity {
     this.updateBase(dt);
   }
 
-  rangedDirection(dt, game, target, dist) {
-    const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
-    if (desired <= 0) return normalize(target.x - this.x, target.y - this.y);
+  hasLineOfSight(game, target) {
     const grid = game.world?.pathfindingGrid;
-    if (!grid || grid.hasLineOfSight(this, target)) return normalize(target.x - this.x, target.y - this.y);
+    return !grid || grid.hasLineOfSight(this, target);
+  }
+
+  rangedDirection(dt, game, target, dist, canSeeTarget = this.hasLineOfSight(game, target)) {
+    const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
+    if (canSeeTarget && desired <= 0) return normalize(target.x - this.x, target.y - this.y);
+    const grid = game.world?.pathfindingGrid;
+    if (!grid || canSeeTarget) return normalize(target.x - this.x, target.y - this.y);
     this.pathTimer -= dt;
     if (this.pathTimer <= 0 || !this.path.length) {
       this.pathTimer = 0.5 + Math.random() * 0.25;

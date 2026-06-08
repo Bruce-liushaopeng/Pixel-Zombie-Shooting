@@ -43,9 +43,6 @@ export class UI {
       })
       .join('');
 
-    const multiplayer = game.isMultiplayer?.()
-      ? this.renderMultiplayerHud(game)
-      : '';
     const downed = game.revive?.isDowned
       ? `<div class="downed-banner"><b>Reviving in ${Math.ceil(game.revive.timer)}s</b><span>Return with 50% HP and pistol. Money stays.</span></div>`
       : '';
@@ -54,7 +51,7 @@ export class UI {
       <div class="hud-row">
         <div class="hud-group hud-left">
           <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
-          ${game.player.armor > 0 ? `<div class="stat stat-armor">Armor <b>${Math.ceil(game.player.armor)}</b></div>` : ''}
+          ${game.player.armor > 0 ? `<div class="stat stat-armor">AR <b>${Math.ceil(game.player.armor)}</b></div>` : ''}
           <div class="stat stat-level">Lv <b>${level.level}</b> <span>${game.score}/${level.next}</span></div>
         </div>
         <div class="hud-group hud-center">
@@ -72,7 +69,6 @@ export class UI {
       </div>
       ${abilityTags ? `<div class="ability-row">${abilityTags}</div>` : ''}
       ${downed}
-      ${multiplayer}
     `;
     if (markup !== this.lastHud) {
       this.hud.innerHTML = markup;
@@ -86,30 +82,6 @@ export class UI {
       if (specialButton) specialButton.onclick = () => this.onSpecial();
       this.lastHud = markup;
     }
-  }
-
-  renderMultiplayerHud(game) {
-    const players = game.multiplayer.connectedPlayers();
-    const rows = players
-      .map((player) => {
-        const isLocal = player.player_id === game.multiplayer.localPlayerId;
-        const remote = game.multiplayer.remotePlayers.get(player.player_id);
-        const health = isLocal ? game.player.health : remote?.health ?? player.health ?? 100;
-        const armor = isLocal ? game.player.armor || 0 : remote?.armor ?? 0;
-        const score = isLocal ? game.score : remote?.score ?? player.score ?? 0;
-        const money = isLocal ? game.money : remote?.money ?? 0;
-        const revive = isLocal && game.revive?.isDowned
-          ? ` Revive ${Math.ceil(game.revive.timer)}s`
-          : remote?.isDowned
-            ? ` Down ${Math.ceil(remote.reviveTimer)}s`
-            : '';
-        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)}${armor ? ` AR ${Math.ceil(armor)}` : ''} Lv ${isLocal ? game.levelManager.level : remote?.level || 1} Score ${score} $${money}${revive}</span>`;
-      })
-      .join('');
-    const status = game.multiplayer.statusMessage
-      ? `<span class="connection-copy">${game.multiplayer.statusMessage}</span>`
-      : '';
-    return `<div class="multiplayer-hud">${rows}${status}</div>`;
   }
 
   renderOverlay(state, game) {
@@ -131,9 +103,9 @@ export class UI {
         button: 'Resume',
       },
       [GAME_STATE.GAME_OVER]: {
-        title: 'Run Ended',
+        title: game.isMultiplayer?.() ? 'Match Results' : 'Run Ended',
         body: game.gameOverSummary?.() || game.endMessage || `Final score ${game.score}. You reached wave ${game.wave}.`,
-        button: 'Restart',
+        button: game.isMultiplayer?.() ? 'Back to Menu' : 'Restart',
       },
     }[state];
 

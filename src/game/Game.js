@@ -56,7 +56,7 @@ export class Game {
     this.ui.onBuyTower = (towerId) => this.buyTower(towerId);
     this.ui.onSpecial = () => this.useSpecial();
     this.ui.onAudioToggle = () => this.toggleAudio();
-    this.ui.onRestart = () => this.start();
+    this.ui.onRestart = () => this.restartFromResults();
     this.ui.onResume = () => this.setState(GAME_STATE.PLAYING);
     this.roomManager = new RoomManager(supabase);
     this.multiplayer = new MultiplayerState();
@@ -281,6 +281,20 @@ export class Game {
     this.mapId = 'city';
     this.reset();
     this.setState(GAME_STATE.START);
+  }
+
+  restartFromResults() {
+    if (this.mode === 'multiplayer' || this.multiplayer.active) {
+      this.roomManager.unsubscribe();
+      this.mode = 'single';
+      this.roomMode = 'single_player';
+      this.multiplayer.reset();
+      this.mapId = 'city';
+      this.reset({ startWave: false });
+      this.setState(GAME_STATE.START);
+      return;
+    }
+    this.start({ difficulty: this.difficultyId, mapId: this.mapId });
   }
 
   setState(state) {

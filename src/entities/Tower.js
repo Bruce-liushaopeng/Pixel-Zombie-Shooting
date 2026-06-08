@@ -6,7 +6,7 @@ export const TOWER_TIERS = {
     id: 'barricade',
     name: 'Guard Tower',
     price: 250,
-    health: 300,
+    health: 250,
     damage: 9,
     range: 320,
     fireDelay: 0.82,
@@ -17,7 +17,7 @@ export const TOWER_TIERS = {
     id: 'sentry',
     name: 'Sentry Tower',
     price: 450,
-    health: 500,
+    health: 300,
     damage: 14,
     range: 430,
     fireDelay: 0.68,
@@ -28,7 +28,7 @@ export const TOWER_TIERS = {
     id: 'bastion',
     name: 'Bastion Tower',
     price: 600,
-    health: 700,
+    health: 400,
     damage: 20,
     range: 520,
     fireDelay: 0.58,
@@ -61,7 +61,7 @@ export class Tower extends Entity {
 
   update(dt, game) {
     this.cooldown = Math.max(0, this.cooldown - dt);
-    const target = this.targetEnemy(game.enemies);
+    const target = this.targetEnemy(game);
     if (!target) {
       this.updateBase(dt);
       return;
@@ -88,9 +88,11 @@ export class Tower extends Entity {
     this.updateBase(dt);
   }
 
-  targetEnemy(enemies) {
-    return enemies
+  targetEnemy(game) {
+    const grid = game.world?.pathfindingGrid;
+    return game.enemies
       .filter((enemy) => !enemy.dead && distance(this, enemy) <= this.range)
+      .filter((enemy) => !grid || grid.hasLineOfSight(this, enemy))
       .sort((a, b) => distance(this, a) - distance(this, b))[0] || null;
   }
 
