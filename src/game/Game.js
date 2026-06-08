@@ -517,6 +517,7 @@ export class Game {
     const rocket = {
       x: this.player.x,
       y: this.player.y,
+      targetId: target.id,
       targetX: target.x,
       targetY: target.y,
       damage,
@@ -534,6 +535,7 @@ export class Game {
           playerId: this.multiplayer.localPlayerId,
           x: this.player.x,
           y: this.player.y,
+          targetId: target.id,
           targetX: target.x,
           targetY: target.y,
           radius: rocket.radius,
@@ -549,11 +551,12 @@ export class Game {
     if (!living.length) return null;
     return living
       .map((enemy) => ({
+        enemy,
         x: enemy.x,
         y: enemy.y,
         score: living.reduce((sum, other) => sum + (distance(enemy, other) < 170 ? 1 : 0), 0) * 1000 - distance(enemy, this.player),
       }))
-      .sort((a, b) => b.score - a.score)[0];
+      .sort((a, b) => b.score - a.score)[0].enemy;
   }
 
   loop(time) {
@@ -907,6 +910,7 @@ export class Game {
         this.specialRockets.push({
           x: special.x,
           y: special.y,
+          targetId: special.targetId,
           targetX: special.targetX,
           targetY: special.targetY,
           damage: special.damage,
@@ -1330,6 +1334,13 @@ export class Game {
       rocket.trail.push({ x: rocket.x, y: rocket.y, life: 0.22 });
       rocket.trail.forEach((dot) => (dot.life -= dt));
       rocket.trail = rocket.trail.filter((dot) => dot.life > 0);
+      const lockedTarget = rocket.targetId
+        ? this.enemies.find((enemy) => enemy.id === rocket.targetId && !enemy.dead)
+        : null;
+      if (lockedTarget) {
+        rocket.targetX = lockedTarget.x;
+        rocket.targetY = lockedTarget.y;
+      }
       const dx = rocket.targetX - rocket.x;
       const dy = rocket.targetY - rocket.y;
       const dist = Math.hypot(dx, dy);
