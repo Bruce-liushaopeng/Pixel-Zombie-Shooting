@@ -82,12 +82,22 @@ canvas {
 .ability-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
+.hud-row {
+  justify-content: space-between;
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .meter,
-.cooldown,
 .stat,
 .ability,
 .empty-abilities {
@@ -96,33 +106,25 @@ canvas {
   box-shadow: inset 0 -3px rgba(0, 0, 0, 0.24);
 }
 
-.meter,
-.cooldown {
+.meter {
   position: relative;
-  height: 30px;
-  min-width: 180px;
+  height: 28px;
+  min-width: 156px;
   overflow: hidden;
 }
 
-.meter span,
-.cooldown span {
+.meter span {
   position: absolute;
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, #ef476f, #ffd166);
   transform-origin: left;
 }
 
-.cooldown span {
-  width: 100%;
-  background: #57b8ff;
-}
-
-.meter p,
-.cooldown p {
+.meter p {
   position: relative;
   z-index: 1;
-  margin: 5px 10px 0;
-  font-size: 13px;
+  margin: 4px 8px 0;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -488,6 +490,12 @@ h1 {
   pointer-events: auto;
 }
 
+.shop-button,
+.leave-button,
+.special-button {
+  min-width: 58px;
+}
+
 .special-button.is-ready {
   animation: special-ready 0.8s ease-in-out infinite alternate;
   box-shadow: 0 0 18px rgba(179, 140, 255, 0.8);
@@ -590,14 +598,12 @@ h1 {
     inset: 10px 10px auto;
   }
 
-  .meter,
-  .cooldown {
+  .meter {
     height: 28px;
     min-width: clamp(116px, 42vw, 160px);
   }
 
   .meter p,
-  .cooldown p,
   .stat,
   .ability,
   .empty-abilities {
@@ -656,20 +662,40 @@ h1 {
     gap: 4px;
   }
 
+  .hud-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    max-width: min(100%, 620px);
+  }
+
+  .hud-group {
+    gap: 4px;
+  }
+
+  .hud-left,
+  .hud-center,
+  .hud-right {
+    min-width: 0;
+  }
+
+  .hud-center {
+    justify-content: center;
+  }
+
+  .hud-right {
+    justify-content: end;
+  }
+
   .meter {
-    height: 24px;
-    min-width: 88px;
-    max-width: 112px;
+    height: 22px;
+    min-width: 78px;
+    max-width: 96px;
   }
 
-  .cooldown {
-    display: none;
-  }
-
-  .meter p,
-  .cooldown p {
+  .meter p {
     margin: 3px 6px 0;
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .stat,
@@ -692,10 +718,18 @@ h1 {
   }
 
   .stat-weapon {
-    max-width: 104px;
+    max-width: 92px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .stat-level span {
+    display: none;
+  }
+
+  .stat-zombies {
+    display: none;
   }
 
   .hud-button {
@@ -710,10 +744,18 @@ h1 {
     right: max(20px, env(safe-area-inset-right));
     bottom: max(146px, calc(env(safe-area-inset-bottom) + 146px));
     z-index: 9;
-    min-width: 70px;
+    min-width: 62px;
     min-height: 42px;
     border-radius: 999px;
     background: #b38cff;
+  }
+
+  .shop-button {
+    min-width: 42px;
+  }
+
+  .leave-button {
+    min-width: 44px;
   }
 
   .ability-row {

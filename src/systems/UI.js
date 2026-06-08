@@ -19,8 +19,8 @@ export class UI {
 
   renderHud(game) {
     const healthPercent = Math.max(0, game.player.health / game.player.maxHealth) * 100;
-    const cooldown = Math.max(0, 1 - game.player.cooldown / game.player.fireDelay);
     const level = game.levelManager?.progress(game.score) || { level: 1, earned: 0, next: 100, percent: 0 };
+    const specialLabel = game.special?.canUse() ? 'SPECIAL' : `${game.special?.percent() ?? 0}%`;
     const abilityTags = [...game.player.abilities.entries()]
       .map(([key, time]) => {
         const ability = ABILITIES[key];
@@ -34,20 +34,23 @@ export class UI {
 
     const markup = `
       <div class="hud-row">
-        <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
-        <div class="stat stat-score">Score <b>${game.score}</b></div>
-        <div class="stat stat-level">Lv <b>${level.level}</b> <span>${game.score}/${level.next}</span></div>
-        <div class="stat stat-money">$<b>${game.money}</b></div>
-        <div class="stat stat-weapon">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
-        <div class="stat stat-wave">W<b>${game.wave}</b></div>
-        <div class="stat stat-zombies">Z<b>${game.zombiesRemaining?.() ?? game.enemies.length}</b></div>
-        <div class="stat stat-mode">${game.modeLabel?.() || 'Single'} / ${game.difficultyLabel?.() || 'Medium'}</div>
-        <button class="hud-button special-button ${game.special?.canUse() ? 'is-ready' : ''}" type="button" data-action="special">Special ${game.special?.percent() ?? 0}%</button>
-        <div class="cooldown"><span style="transform:scaleX(${cooldown})"></span><p>Fire</p></div>
-        <button class="hud-button" type="button" data-action="shop">Shop</button>
-        ${game.isMultiplayer?.() ? '<button class="hud-button" type="button" data-action="leave-room">Leave</button>' : ''}
+        <div class="hud-group hud-left">
+          <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
+          <div class="stat stat-level">Lv <b>${level.level}</b> <span>${game.score}/${level.next}</span></div>
+        </div>
+        <div class="hud-group hud-center">
+          <div class="stat stat-score">Score <b>${game.score}</b></div>
+          <div class="stat stat-money">$<b>${game.money}</b></div>
+        </div>
+        <div class="hud-group hud-right">
+          <div class="stat stat-weapon">${game.weaponManager?.current().name || 'Pistol'} <b>${game.weaponAmmoLabel?.() || '∞'}</b></div>
+          <div class="stat stat-wave">W<b>${game.wave}</b></div>
+          <button class="hud-button shop-button" type="button" data-action="shop">Shop</button>
+          ${game.isMultiplayer?.() ? '<button class="hud-button leave-button" type="button" data-action="leave-room">Leave</button>' : ''}
+        </div>
+        <button class="hud-button special-button ${game.special?.canUse() ? 'is-ready' : ''}" type="button" data-action="special">${specialLabel}</button>
       </div>
-      <div class="ability-row">${abilityTags || '<span class="empty-abilities">No active abilities</span>'}</div>
+      ${abilityTags ? `<div class="ability-row">${abilityTags}</div>` : ''}
       ${multiplayer}
     `;
     if (markup !== this.lastHud) {
