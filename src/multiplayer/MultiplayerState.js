@@ -5,6 +5,7 @@ export class RemotePlayerState {
     this.playerSlot = row.player_slot || 2;
     this.isHost = Boolean(row.is_host);
     this.isConnected = Boolean(row.is_connected);
+    this.isShopping = Boolean(row.is_shopping || row.isShopping);
     this.x = Number(row.x || 0);
     this.y = Number(row.y || 0);
     this.targetX = this.x;
@@ -29,6 +30,7 @@ export class RemotePlayerState {
     this.playerSlot = row.player_slot || this.playerSlot;
     this.isHost = Boolean(row.is_host);
     this.isConnected = Boolean(row.is_connected);
+    this.isShopping = Boolean(row.is_shopping ?? row.isShopping ?? this.isShopping);
     this.targetX = Number(row.x ?? this.targetX);
     this.targetY = Number(row.y ?? this.targetY);
     this.angle = Number(row.angle ?? this.angle);

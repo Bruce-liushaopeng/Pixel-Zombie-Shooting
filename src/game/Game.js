@@ -564,7 +564,7 @@ export class Game {
     }
     if (this.input.audioPressed) this.toggleAudio();
     if (this.input.shopPressed && this.state === GAME_STATE.PLAYING) this.openShop();
-    if (this.input.specialPressed && this.state === GAME_STATE.PLAYING) this.useSpecial();
+    if (this.input.specialPressed && this.state === GAME_STATE.PLAYING && !this.shopOpen) this.useSpecial();
     if (this.state === GAME_STATE.PLAYING) this.update(dt);
     this.draw();
     this.ui.renderHud(this);
@@ -604,7 +604,7 @@ export class Game {
 
     const mouseWorld = this.camera.screenToWorld(this.input.mouse);
     const aimWorld = this.input.aimTarget(this.player, mouseWorld);
-    if (!this.revive.isDowned) this.player.update(dt, this.input, aimWorld, this.world);
+    if (!this.revive.isDowned && !this.shopOpen) this.player.update(dt, this.input, aimWorld, this.world);
     this.special.update(dt);
     this.specialRipples.forEach((ripple) => {
       ripple.life -= dt;
@@ -614,7 +614,7 @@ export class Game {
     this.multiplayer.updateRemotePlayers(dt);
     this.camera.follow(this.player, dt);
 
-    if (!this.revive.isDowned && (this.input.mouse.down || this.input.mouse.pressed || this.input.isMobileShooting()) && this.player.canShoot()) {
+    if (!this.revive.isDowned && !this.shopOpen && (this.input.mouse.down || this.input.mouse.pressed || this.input.isMobileShooting()) && this.player.canShoot()) {
       this.firePlayer(aimWorld);
     }
 
@@ -841,6 +841,7 @@ export class Game {
         health: Math.max(0, Math.ceil(this.player.health)),
         armor: Math.max(0, Math.ceil(this.player.armor || 0)),
         score: this.score,
+        isShopping: this.shopOpen,
       });
     }
 
@@ -967,10 +968,12 @@ export class Game {
   }
 
   nearestLivingPlayer(from) {
-    const candidates = [{ ...this.player, isLocal: true }];
+    const candidates = [];
+    const ignoreShoppingTargets = this.isMultiplayer() && this.roomMode === 'coop';
+    if (!(ignoreShoppingTargets && this.shopOpen)) candidates.push({ ...this.player, isLocal: true });
     if (this.isMultiplayer()) {
       for (const remote of this.multiplayer.remotePlayers.values()) {
-        if (remote.isConnected && remote.health > 0) candidates.push({ ...remote, isLocal: false });
+        if (remote.isConnected && remote.health > 0 && !(ignoreShoppingTargets && remote.isShopping)) candidates.push({ ...remote, isLocal: false });
       }
     }
     for (const tower of this.towers) {
@@ -1163,10 +1166,20 @@ export class Game {
     const tower = this.towers.find((candidate) => !candidate.dead && distance(bullet, candidate) < bullet.r + candidate.r);
     if (!tower) return false;
     bullet.dead = true;
-    tower.damage(bullet.damage);
+    this.damageTower(tower, bullet.damage);
     this.burst(bullet.x, bullet.y, tower.color, 5);
     this.addFloatingText(`-${bullet.damage}`, tower.x, tower.y - 36, '#9ee7ff');
     return true;
+  }
+
+  damageTower(tower, amount) {
+    if (!tower || tower.dead) return;
+    if (typeof tower.damage === 'function') tower.damage(amount);
+    else {
+      tower.health -= amount;
+      tower.flash = 0.12;
+      if (tower.health <= 0) tower.dead = true;
+    }
   }
 
   updateTowers(dt) {

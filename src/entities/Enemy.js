@@ -57,7 +57,7 @@ export class Zombie extends Entity {
           game.audio.hit();
           game.addFloatingText(`-${this.attackDamage}`, game.player.x, game.player.y - 25, '#ef476f');
         } else if (target.isTower && target.towerRef && distance(this, target) < this.r + target.r + 56) {
-          target.towerRef.damage(this.attackDamage);
+          game.damageTower(target.towerRef, this.attackDamage);
           game.addFloatingText(`-${this.attackDamage}`, target.towerRef.x, target.towerRef.y - 34, '#9ee7ff');
         }
         game.burst(this.x, this.y, '#ff8c42', 16);
@@ -68,8 +68,7 @@ export class Zombie extends Entity {
       game.audio.hit();
       game.addFloatingText(`-${this.attackDamage}`, game.player.x, game.player.y - 25, '#ef476f');
     } else if (target.isTower && target.towerRef && distance(this, target) < this.r + target.r) {
-      target.towerRef.damage(this.attackDamage * dt * 1.7);
-      target.towerRef.flash = 0.12;
+      game.damageTower(target.towerRef, this.attackDamage * dt * 1.7);
     }
     this.updateBase(dt);
   }
