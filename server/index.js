@@ -54,6 +54,7 @@ const DIRECT_EVENT_NAMES = new Map([
   ['game_over', 'game_over'],
   ['pickup_collected', 'pickup_collected'],
   ['player_shoot', 'player_shoot'],
+  ['tower_placed', 'tower_placed'],
 ]);
 
 function normalizeRoomCode(roomCode) {

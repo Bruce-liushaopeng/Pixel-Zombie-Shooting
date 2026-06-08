@@ -2,7 +2,7 @@ import { Camera } from './Camera.js';
 import { GAME_STATE, WORLD, ABILITIES } from './constants.js';
 import { chance, distance, rand } from './math.js';
 import { World } from './World.js';
-import { drawBullet, drawPickup, drawPlayer, drawRival, drawZombie } from '../assets/sprites.js';
+import { drawBullet, drawPickup, drawPlayer, drawRival, drawTower, drawZombie } from '../assets/sprites.js';
 import { Bullet } from '../entities/Bullet.js';
 import { Rival, Zombie } from '../entities/Enemy.js';
 import { FloatingText, Particle } from '../entities/Particle.js';
@@ -21,6 +21,7 @@ import { getGameMode, getModeFromRoomMode } from './GameModeManager.js';
 import { WeaponManager } from './WeaponManager.js';
 import { getWeapon } from '../entities/WeaponTypes.js';
 import { getZombieType, zombieTypesFor } from '../entities/ZombieTypes.js';
+import { Tower, getTowerTier, TOWER_TIERS } from '../entities/Tower.js';
 import { LevelManager } from './LevelManager.js';
 import { SpecialAbilityManager } from './SpecialAbilityManager.js';
 import { ReviveManager } from './ReviveManager.js';
@@ -52,6 +53,7 @@ export class Game {
     this.ui.onBuyHealth = (amount, cost) => this.buyHealth(amount, cost);
     this.ui.onBuyArmor = (amount, cost) => this.buyArmor(amount, cost);
     this.ui.onBuyUpgrade = (upgradeId) => this.buyAbilityUpgrade(upgradeId);
+    this.ui.onBuyTower = (towerId) => this.buyTower(towerId);
     this.ui.onSpecial = () => this.useSpecial();
     this.ui.onAudioToggle = () => this.toggleAudio();
     this.ui.onRestart = () => this.start();
@@ -108,6 +110,7 @@ export class Game {
     this.enemies = [];
     this.bullets = [];
     this.pickups = [this.createSafePickup('health')];
+    this.towers = [];
     this.particles = [];
     this.floaters = [];
     this.score = 0;
@@ -456,6 +459,48 @@ export class Game {
     this.ui.renderShop(this, 'Permanent run upgrade purchased.', 'abilities');
   }
 
+  towerShopItems() {
+    return Object.values(TOWER_TIERS).map((tower) => ({
+      ...tower,
+      description: tower.id === 'barricade'
+        ? 'Budget tower with solid HP and steady close defense.'
+        : tower.id === 'sentry'
+          ? 'Better range, HP, and firepower for mid-wave defense.'
+          : 'Expensive durable tower with strong coverage, but still destructible.',
+    }));
+  }
+
+  buyTower(towerId) {
+    const tier = getTowerTier(towerId);
+    if (this.money < tier.price) {
+      this.ui.renderShop(this, 'Not enough money.', 'towers');
+      return;
+    }
+    if (isBlocked(this.player.x, this.player.y, 28, this.world)) {
+      this.ui.renderShop(this, 'Move to open ground before building.', 'towers');
+      return;
+    }
+    this.money -= tier.price;
+    const tower = this.createTower({
+      x: this.player.x,
+      y: this.player.y,
+      tierId: tier.id,
+      ownerId: this.isMultiplayer() ? this.multiplayer.localPlayerId : null,
+    });
+    this.towers.push(tower);
+    this.addFloatingText(`${tier.name} built`, tower.x, tower.y - 52, tier.color);
+    this.audio.pickup();
+    this.broadcastEconomy();
+    if (this.isMultiplayer()) {
+      this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.TOWER_PLACED, nowPayload({ tower: tower.serialize() }));
+    }
+    this.ui.renderShop(this, `${tier.name} deployed.`, 'towers');
+  }
+
+  createTower(data) {
+    return new Tower(data);
+  }
+
   useSpecial() {
     if (this.revive.isDowned) return;
     if (!this.special.canUse()) {
@@ -585,6 +630,7 @@ export class Game {
 
     this.bullets.forEach((bullet) => bullet.update(dt, this.world));
     this.enemies.forEach((enemy) => enemy.update(dt, this));
+    this.updateTowers(dt);
     this.pickups.forEach((pickup) => pickup.update(dt));
     this.particles.forEach((particle) => particle.update(dt));
     this.floaters.forEach((text) => text.update(dt));
@@ -726,10 +772,20 @@ export class Game {
     this.audio.pickup();
   }
 
+  applyRemoteTower(event) {
+    const data = event.payload?.tower;
+    if (!data || this.towers.some((tower) => tower.id === data.id)) return;
+    this.towers.push(this.createTower(data));
+    if (event.player_id !== this.multiplayer.localPlayerId) {
+      this.addFloatingText('Tower deployed', Number(data.x), Number(data.y) - 52, getTowerTier(data.tierId).color);
+    }
+  }
+
   handleNetworkEvent(event) {
     if (!this.isMultiplayer() || !this.multiplayer.markEventSeen(event.id)) return;
     if (event.event_type === NETWORK_EVENTS.PLAYER_SHOOT) this.spawnRemoteShot(event);
     if (event.event_type === NETWORK_EVENTS.PICKUP_COLLECTED) this.applyRemotePickup(event);
+    if (event.event_type === NETWORK_EVENTS.TOWER_PLACED) this.applyRemoteTower(event);
     if (event.event_type === NETWORK_EVENTS.PLAYER_HIT && event.player_id !== this.multiplayer.localPlayerId) {
       const payload = event.payload || {};
       if (payload.shooterPlayerId === this.multiplayer.localPlayerId) {
@@ -831,6 +887,7 @@ export class Game {
         type: pickup.type,
         pulse: pickup.pulse,
       })),
+      towers: this.towers.map((tower) => tower.serialize()),
     };
   }
 
@@ -895,6 +952,18 @@ export class Game {
       pickup.pulse = Number(data.pulse || pickup.pulse);
       return pickup;
     });
+    this.towers = (payload.towers || []).map((data) => {
+      const existing = this.towers.find((tower) => tower.id === data.id);
+      const tower = existing || this.createTower(data);
+      tower.x = Number(data.x);
+      tower.y = Number(data.y);
+      tower.health = Number(data.health);
+      tower.maxHealth = Number(data.maxHealth || tower.maxHealth);
+      tower.angle = Number(data.angle || tower.angle || 0);
+      tower.cooldown = Number(data.cooldown || tower.cooldown || 0);
+      tower.dead = tower.health <= 0;
+      return tower;
+    });
   }
 
   nearestLivingPlayer(from) {
@@ -903,6 +972,9 @@ export class Game {
       for (const remote of this.multiplayer.remotePlayers.values()) {
         if (remote.isConnected && remote.health > 0) candidates.push({ ...remote, isLocal: false });
       }
+    }
+    for (const tower of this.towers) {
+      if (!tower.dead && tower.health > 0) candidates.push({ ...tower, isLocal: false, isTower: true, towerRef: tower });
     }
     return candidates
       .filter((player) => player.health > 0)
@@ -1052,6 +1124,8 @@ export class Game {
           if (enemy.dead) this.killEnemy(enemy, bullet.ownerId);
           break;
         }
+      } else if (this.hitTowerWithEnemyBullet(bullet)) {
+        continue;
       } else if (distance(bullet, this.player) < bullet.r + this.player.r) {
         bullet.dead = true;
         if (this.player.hurt(bullet.damage)) {
@@ -1081,6 +1155,25 @@ export class Game {
           pickupType: pickup.type,
         }));
       }
+    }
+  }
+
+  hitTowerWithEnemyBullet(bullet) {
+    if (bullet.friendly) return false;
+    const tower = this.towers.find((candidate) => !candidate.dead && distance(bullet, candidate) < bullet.r + candidate.r);
+    if (!tower) return false;
+    bullet.dead = true;
+    tower.damage(bullet.damage);
+    this.burst(bullet.x, bullet.y, tower.color, 5);
+    this.addFloatingText(`-${bullet.damage}`, tower.x, tower.y - 36, '#9ee7ff');
+    return true;
+  }
+
+  updateTowers(dt) {
+    for (const tower of this.towers) {
+      if (tower.dead) continue;
+      if (!this.isMultiplayer() || this.multiplayer.isHost) tower.update(dt, this);
+      else tower.updateBase(dt);
     }
   }
 
@@ -1211,6 +1304,7 @@ export class Game {
   cleanup() {
     this.bullets = this.bullets.filter((bullet) => !bullet.dead);
     this.enemies = this.enemies.filter((enemy) => !enemy.dead);
+    this.towers = this.towers.filter((tower) => !tower.dead);
     this.pickups = this.pickups.filter((pickup) => !pickup.dead);
     this.particles = this.particles.filter((particle) => particle.life > 0);
     this.floaters = this.floaters.filter((text) => text.life > 0);
@@ -1279,6 +1373,7 @@ export class Game {
     this.camera.apply(this.ctx);
     this.world.draw(this.ctx, this.camera);
     this.pickups.forEach((pickup) => drawPickup(this.ctx, pickup));
+    this.towers.forEach((tower) => drawTower(this.ctx, tower));
     this.bullets.forEach((bullet) => drawBullet(this.ctx, bullet));
     this.enemies
       .slice()
@@ -1312,6 +1407,49 @@ export class Game {
     this.ctx.restore();
     this.drawVignette();
     this.drawBossBar();
+    if (this.state === GAME_STATE.PLAYING) this.drawMinimap();
+  }
+
+  drawMinimap() {
+    const width = 156;
+    const height = 104;
+    const x = this.canvas.width - width - 14;
+    const y = 74;
+    const sx = width / this.world.width;
+    const sy = height / this.world.height;
+    const dot = (entity, color, size = 3) => {
+      const px = x + entity.x * sx;
+      const py = y + entity.y * sy;
+      this.ctx.fillStyle = color;
+      this.ctx.fillRect(px - size / 2, py - size / 2, size, size);
+    };
+
+    this.ctx.save();
+    this.ctx.fillStyle = 'rgba(10, 15, 19, 0.76)';
+    this.ctx.fillRect(x, y, width, height);
+    this.ctx.strokeStyle = '#53606b';
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(x, y, width, height);
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    for (const road of this.world.roads || []) {
+      this.ctx.fillRect(x + road.x * sx, y + road.y * sy, road.w * sx, road.h * sy);
+    }
+    for (const enemy of this.enemies) {
+      if (!enemy.dead) dot(enemy, '#ef476f', enemy.isBoss ? 5 : 3);
+    }
+    for (const tower of this.towers) {
+      if (!tower.dead) dot(tower, '#9ee7ff', 4);
+    }
+    if (this.isMultiplayer()) {
+      for (const remote of this.multiplayer.remotePlayers.values()) {
+        if (remote.isConnected && remote.health > 0) dot(remote, '#4cc9a7', 5);
+      }
+    }
+    dot(this.player, '#ffd166', 5);
+    this.ctx.fillStyle = '#fff6d1';
+    this.ctx.font = '9px monospace';
+    this.ctx.fillText('MAP', x + 6, y + 12);
+    this.ctx.restore();
   }
 
   drawBossBar() {

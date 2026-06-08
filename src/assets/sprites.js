@@ -154,3 +154,32 @@ export function drawPickup(ctx, pickup) {
   ctx.fillText(pickup.icon, 0, 1);
   ctx.restore();
 }
+
+export function drawTower(ctx, tower) {
+  const pct = Math.max(0, Math.min(1, tower.health / tower.maxHealth));
+  ctx.save();
+  ctx.translate(tower.x, tower.y);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+  ctx.fillRect(-24, 19, 48, 8);
+  ctx.fillStyle = COLORS.outline;
+  ctx.fillRect(-24, -24, 48, 48);
+  ctx.fillStyle = tower.flash > 0 ? '#fff8dc' : '#2f3c45';
+  ctx.fillRect(-19, -19, 38, 38);
+  ctx.fillStyle = tower.color || '#9ee7ff';
+  ctx.fillRect(-12, -12, 24, 24);
+  ctx.rotate(tower.angle || 0);
+  ctx.fillStyle = '#101820';
+  ctx.fillRect(2, -5, 26, 10);
+  ctx.fillStyle = '#fff6d1';
+  ctx.fillRect(21, -2, 7, 4);
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = '#101820';
+  ctx.fillRect(tower.x - 24, tower.y - 37, 48, 6);
+  ctx.fillStyle = pct > 0.45 ? '#9ee7ff' : '#ef476f';
+  ctx.fillRect(tower.x - 24, tower.y - 37, 48 * pct, 6);
+  ctx.strokeStyle = COLORS.outline;
+  ctx.strokeRect(tower.x - 24, tower.y - 37, 48, 6);
+  ctx.restore();
+}

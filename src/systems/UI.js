@@ -17,6 +17,7 @@ export class UI {
     this.onBuyHealth = () => {};
     this.onBuyArmor = () => {};
     this.onBuyUpgrade = () => {};
+    this.onBuyTower = () => {};
     this.onSpecial = () => {};
     this.onAudioToggle = () => {};
     this.onRestart = () => {};
@@ -274,7 +275,7 @@ export class UI {
   renderShop(game, message = '', tab = 'weapons') {
     const weapons = game.weaponManager.list();
     const damageBonus = (game.levelManager?.damageBonus() || 0) + (game.player?.permanentDamageBonus || 0);
-    const activeTab = ['weapons', 'health', 'abilities'].includes(tab) ? tab : 'weapons';
+    const activeTab = ['weapons', 'health', 'abilities', 'towers'].includes(tab) ? tab : 'weapons';
     const missingHp = Math.max(0, game.player.maxHealth - game.player.health);
     const missingArmor = Math.max(0, (game.player.maxArmor || 100) - (game.player.armor || 0));
     const healthItems = [
@@ -307,6 +308,7 @@ export class UI {
         current: `+${Math.round((game.player?.permanentSpeedBonus || 0) * 100)}% speed`,
       },
     ];
+    const towers = game.towerShopItems?.() || [];
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
       <div class="menu shop-menu">
@@ -318,6 +320,7 @@ export class UI {
           <button class="${activeTab === 'weapons' ? 'is-active' : ''}" type="button" data-shop-tab="weapons">Weapons</button>
           <button class="${activeTab === 'health' ? 'is-active' : ''}" type="button" data-shop-tab="health">HP Back</button>
           <button class="${activeTab === 'abilities' ? 'is-active' : ''}" type="button" data-shop-tab="abilities">Ability</button>
+          <button class="${activeTab === 'towers' ? 'is-active' : ''}" type="button" data-shop-tab="towers">Tower</button>
         </div>
         ${activeTab === 'weapons' ? `
           <div class="shop-grid">
@@ -368,7 +371,7 @@ export class UI {
               </article>
             `).join('')}
           </div>
-        ` : `
+        ` : activeTab === 'abilities' ? `
           <div class="shop-grid ability-upgrade-grid">
             ${upgrades.map((upgrade) => {
               const maxed = upgrade.level >= upgrade.max;
@@ -389,6 +392,25 @@ export class UI {
               `;
             }).join('')}
           </div>
+        ` : `
+          <p class="shop-section-copy">Towers deploy at your current position, draw zombie attention, and shoot nearby enemies. Zombies can destroy them.</p>
+          <div class="shop-grid tower-grid">
+            ${towers.map((tower) => `
+              <article class="weapon-card tower-card">
+                <h2>${this.escape(tower.name)}</h2>
+                <p>${this.escape(tower.description)}</p>
+                <dl>
+                  <div><dt>Price</dt><dd>${tower.price}</dd></div>
+                  <div><dt>HP</dt><dd>${tower.health}</dd></div>
+                  <div><dt>Damage</dt><dd>${tower.damage}</dd></div>
+                  <div><dt>Range</dt><dd>${tower.range}</dd></div>
+                </dl>
+                <button class="pixel-button ${game.money < tower.price ? 'secondary' : ''}" type="button" data-tower="${tower.id}">
+                  Build Tower
+                </button>
+              </article>
+            `).join('')}
+          </div>
         `}
         ${message ? `<p class="${message.includes('Not enough') ? 'error-copy' : 'status-copy'}">${this.escape(message)}</p>` : ''}
         <button class="pixel-button secondary" type="button" data-action="close-shop">Close</button>
@@ -408,6 +430,9 @@ export class UI {
     });
     this.overlay.querySelectorAll('[data-upgrade]').forEach((button) => {
       button.onclick = () => this.onBuyUpgrade(button.dataset.upgrade);
+    });
+    this.overlay.querySelectorAll('[data-tower]').forEach((button) => {
+      button.onclick = () => this.onBuyTower(button.dataset.tower);
     });
     this.overlay.querySelectorAll('[data-action="close-shop"]').forEach((button) => {
       button.onclick = () => this.onCloseShop();

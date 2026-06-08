@@ -11,6 +11,7 @@ export const NETWORK_EVENTS = {
   ZOMBIE_HIT: 'zombie_hit',
   ZOMBIE_KILLED: 'zombie_killed',
   PICKUP_COLLECTED: 'pickup_collected',
+  TOWER_PLACED: 'tower_placed',
   SPECIAL_USED: 'special_used',
   BOSS_SPAWNED: 'boss_spawned',
   BOSS_STATE: 'boss_state',

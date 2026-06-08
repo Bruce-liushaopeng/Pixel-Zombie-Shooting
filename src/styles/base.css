@@ -546,6 +546,10 @@ h1 {
   border-color: #9ee7ff;
 }
 
+.tower-card {
+  border-color: #b38cff;
+}
+
 .shop-section-copy {
   margin: 14px auto 0;
   color: #c8d1d8;
