@@ -50,7 +50,7 @@ Before starting, choose Easy, Medium, or Hard. Difficulty changes zombie counts,
 - Multiplayer Co-op: two players fight zombies together, with friendly fire disabled
 - Multiplayer PvP: two players can damage each other while zombies remain an environmental threat
 
-Players also level up from score. Each level restores exactly 10 HP, capped at max HP, and adds +2 bullet damage per level. Leveling does not increase fire rate.
+Players also level up from score. Each level restores exactly 10 HP, capped at max HP, and adds +0.5 bullet damage per level. Leveling does not increase fire rate.
 
 ## Shop and weapons
 

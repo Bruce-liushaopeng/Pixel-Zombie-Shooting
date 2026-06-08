@@ -34,7 +34,7 @@ export class LevelManager {
   }
 
   damageBonus() {
-    return (this.level - 1) * 2;
+    return (this.level - 1) * 0.5;
   }
 
   specialMultiplier() {

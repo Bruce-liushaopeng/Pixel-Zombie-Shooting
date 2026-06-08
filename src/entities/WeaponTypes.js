@@ -17,7 +17,7 @@ export const WEAPONS = {
     name: 'SMG',
     price: 150,
     damage: 7,
-    fireDelay: 0.1,
+    fireDelay: 0.15,
     ammo: 120,
     speed: 760,
     pellets: 1,
@@ -30,7 +30,7 @@ export const WEAPONS = {
     name: 'Shotgun',
     price: 250,
     damage: 8,
-    fireDelay: 0.7,
+    fireDelay: 0.47,
     ammo: 30,
     speed: 660,
     pellets: 5,
@@ -43,7 +43,7 @@ export const WEAPONS = {
     name: 'Rifle',
     price: 300,
     damage: 25,
-    fireDelay: 0.45,
+    fireDelay: 0.3,
     ammo: 40,
     speed: 860,
     pellets: 1,
@@ -56,7 +56,7 @@ export const WEAPONS = {
     name: 'Plasma Gun',
     price: 500,
     damage: 40,
-    fireDelay: 0.5,
+    fireDelay: 0.33,
     ammo: 25,
     speed: 700,
     pellets: 1,
@@ -70,7 +70,7 @@ export const WEAPONS = {
     name: 'Rocket Launcher',
     price: 700,
     damage: 80,
-    fireDelay: 1.2,
+    fireDelay: 0.8,
     ammo: 8,
     speed: 520,
     pellets: 1,
@@ -87,4 +87,3 @@ export const WEAPON_LIST = Object.values(WEAPONS);
 export function getWeapon(id = 'pistol') {
   return WEAPONS[id] || WEAPONS.pistol;
 }
-
