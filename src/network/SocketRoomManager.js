@@ -36,7 +36,7 @@ export class SocketRoomManager {
     return localStorage.getItem(PLAYER_NAME_KEY) || '';
   }
 
-  async joinOrCreateRoom({ roomCode, playerName, mode = 'coop', difficulty = 'medium' }) {
+  async joinOrCreateRoom({ roomCode, playerName, mode = 'coop', difficulty = 'medium', mapId = 'city' }) {
     const cleanCode = normalizeRoomCode(roomCode);
     const cleanName = String(playerName || '').trim().slice(0, 18) || 'Survivor';
     if (!cleanCode) throw new Error('Enter a room code.');
@@ -48,6 +48,7 @@ export class SocketRoomManager {
       playerId: this.playerId,
       mode,
       difficulty,
+      mapId,
     });
 
     this.room = session.room;

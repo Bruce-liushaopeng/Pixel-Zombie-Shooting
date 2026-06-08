@@ -60,6 +60,7 @@ export class MultiplayerState {
     this.statusMessage = '';
     this.roomMode = 'coop';
     this.difficulty = 'medium';
+    this.mapId = 'city';
     this.processedEvents = new Set();
     this.lastPlayerWrite = 0;
     this.lastSyncWrite = 0;
@@ -75,6 +76,7 @@ export class MultiplayerState {
     this.isHost = Boolean(player.is_host);
     this.roomMode = room?.game_state?.mode || 'coop';
     this.difficulty = room?.game_state?.difficulty || 'medium';
+    this.mapId = room?.game_state?.mapId || 'city';
     this.applyPlayers(players);
   }
 
@@ -83,6 +85,7 @@ export class MultiplayerState {
     this.isHost = room?.host_player_id === this.localPlayerId;
     this.roomMode = room?.game_state?.mode || this.roomMode;
     this.difficulty = room?.game_state?.difficulty || this.difficulty;
+    this.mapId = room?.game_state?.mapId || this.mapId;
   }
 
   applyPlayers(rows = []) {

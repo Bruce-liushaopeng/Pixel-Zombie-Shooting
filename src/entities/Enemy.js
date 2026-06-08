@@ -21,12 +21,15 @@ export class Zombie extends Entity {
     this.warnTimer = 0;
     this.movePhase = Math.random() * Math.PI * 2;
     this.chargeTimer = 0.6 + Math.random() * 1.4;
+    this.path = [];
+    this.pathTimer = Math.random() * 0.5;
+    this.pathRecheck = 0.35 + Math.random() * 0.35;
   }
 
   update(dt, game) {
     const target = game.nearestLivingPlayer(this);
     if (!target) return;
-    let dir = normalize(target.x - this.x, target.y - this.y);
+    let dir = this.pathDirection(dt, game, target);
     let speed = this.speed;
     this.angle = Math.atan2(target.y - this.y, target.x - this.x);
     this.movePhase += dt * 5;
@@ -64,6 +67,25 @@ export class Zombie extends Entity {
     }
     this.updateBase(dt);
   }
+
+  pathDirection(dt, game, target) {
+    const grid = game.world?.pathfindingGrid;
+    if (!grid || grid.hasLineOfSight(this, target)) {
+      this.path = [];
+      return normalize(target.x - this.x, target.y - this.y);
+    }
+
+    this.pathTimer -= dt;
+    if (this.pathTimer <= 0 || !this.path.length || distance(this.path[this.path.length - 1], target) > 120) {
+      const far = distance(this, target) > 850;
+      this.pathTimer = (far ? 0.65 : this.pathRecheck) + Math.random() * 0.18;
+      this.path = grid.findPath(this, target);
+    }
+
+    while (this.path.length && distance(this, this.path[0]) < Math.max(28, this.r + 10)) this.path.shift();
+    const waypoint = this.path[0] || target;
+    return normalize(waypoint.x - this.x, waypoint.y - this.y);
+  }
 }
 
 export class Rival extends Entity {
@@ -85,13 +107,15 @@ export class Rival extends Entity {
     this.shootTimer = 1 + Math.random();
     this.summonTimer = 5 + Math.random() * 3;
     this.angle = 0;
+    this.path = [];
+    this.pathTimer = Math.random() * 0.45;
   }
 
   update(dt, game) {
     const target = game.nearestLivingPlayer(this);
     if (!target) return;
     const dist = distance(this, target);
-    const dir = normalize(target.x - this.x, target.y - this.y);
+    const dir = this.rangedDirection(dt, game, target, dist);
     const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
     this.x += dir.x * this.speed * desired * dt;
     this.y += dir.y * this.speed * desired * dt;
@@ -121,5 +145,20 @@ export class Rival extends Entity {
       }
     }
     this.updateBase(dt);
+  }
+
+  rangedDirection(dt, game, target, dist) {
+    const desired = dist < 250 ? -1 : dist > 380 ? 1 : 0;
+    if (desired <= 0) return normalize(target.x - this.x, target.y - this.y);
+    const grid = game.world?.pathfindingGrid;
+    if (!grid || grid.hasLineOfSight(this, target)) return normalize(target.x - this.x, target.y - this.y);
+    this.pathTimer -= dt;
+    if (this.pathTimer <= 0 || !this.path.length) {
+      this.pathTimer = 0.5 + Math.random() * 0.25;
+      this.path = grid.findPath(this, target, 650);
+    }
+    while (this.path.length && distance(this, this.path[0]) < Math.max(28, this.r + 10)) this.path.shift();
+    const waypoint = this.path[0] || target;
+    return normalize(waypoint.x - this.x, waypoint.y - this.y);
   }
 }

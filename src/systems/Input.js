@@ -35,6 +35,10 @@ export class Input {
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
 
+  setGameplayActive(active) {
+    this.mobile.setGameplayActive(active);
+  }
+
   setMouse(event) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
@@ -61,7 +65,7 @@ export class Input {
   }
 
   isMobileShooting() {
-    return this.mobile.isAiming();
+    return this.mobile.gameplayActive && this.mobile.isAiming();
   }
 
   aimTarget(player, mouseWorld) {
@@ -73,7 +77,7 @@ export class Input {
         y: player.y + aim.y * 160,
       };
     }
-    if (this.mobile.enabled) {
+    if (this.mobile.enabled && this.mobile.gameplayActive) {
       return {
         x: player.x + this.lastMobileAim.x * 160,
         y: player.y + this.lastMobileAim.y * 160,

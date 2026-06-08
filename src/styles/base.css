@@ -229,11 +229,70 @@ canvas {
 
 .menu {
   width: min(620px, calc(100% - 28px));
+  max-height: calc(100svh - 28px);
+  overflow-y: auto;
   padding: 32px;
   border: 2px solid #ffd166;
   background: rgba(16, 24, 32, 0.94);
   text-align: center;
   box-shadow: 0 18px 0 rgba(0, 0, 0, 0.22), inset 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+
+.map-menu {
+  width: min(940px, calc(100% - 22px));
+}
+
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.map-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  min-height: 230px;
+  padding: 12px;
+  border: 2px solid #53606b;
+  background: rgba(10, 15, 19, 0.76);
+  color: #c8d1d8;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-card:hover,
+.map-card.is-selected {
+  border-color: #ffd166;
+}
+
+.map-preview {
+  min-height: 76px;
+  border: 2px solid #111820;
+  background:
+    linear-gradient(90deg, transparent 42%, var(--c2) 42% 58%, transparent 58%),
+    linear-gradient(0deg, transparent 40%, var(--c2) 40% 58%, transparent 58%),
+    linear-gradient(135deg, var(--c1), var(--c3));
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.05);
+}
+
+.map-card b {
+  color: #fff6d1;
+  font-size: 1rem;
+}
+
+.map-card span,
+.map-card em {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.map-card em {
+  color: var(--c4);
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .eyebrow,
@@ -542,6 +601,11 @@ h1 {
   pointer-events: auto;
 }
 
+.hud-button.special-button {
+  display: inline-grid;
+  place-items: center;
+}
+
 .shop-button,
 .leave-button,
 .special-button {
@@ -715,8 +779,89 @@ h1 {
     padding: 22px;
   }
 
+  .map-grid {
+    grid-template-columns: 1fr;
+  }
+
   h1 {
     font-size: 2.4rem;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .shell {
+    min-height: 100svh;
+    padding: 6px;
+  }
+
+  .canvas-frame {
+    padding: 4px;
+  }
+
+  .overlay {
+    inset: 4px;
+    align-items: start;
+    padding: 6px 0;
+    overflow: hidden;
+  }
+
+  .menu {
+    width: min(860px, calc(100% - 12px));
+    max-height: calc(100svh - 24px);
+    padding: 14px;
+  }
+
+  h1 {
+    margin-bottom: 8px;
+    font-size: clamp(1.9rem, 8vh, 2.8rem);
+  }
+
+  .menu p {
+    margin-bottom: 12px;
+    line-height: 1.35;
+  }
+
+  .menu-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  .pixel-button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .difficulty-selector {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .difficulty-selector span {
+    min-width: 70px;
+    padding: 7px 9px;
+  }
+
+  .map-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+  }
+
+  .map-card {
+    min-height: 150px;
+    padding: 8px;
+  }
+
+  .map-preview {
+    min-height: 42px;
+  }
+
+  .map-card span,
+  .map-card em {
+    font-size: 11px;
   }
 }
 
@@ -832,6 +977,7 @@ h1 {
   }
 
   .special-button {
+    display: none;
     position: fixed;
     right: max(20px, env(safe-area-inset-right));
     bottom: max(146px, calc(env(safe-area-inset-bottom) + 146px));
@@ -841,6 +987,11 @@ h1 {
     min-width: 58px;
     min-height: 58px;
     font-size: 10px;
+  }
+
+  .mobile-controls.is-visible ~ .hud .special-button,
+  .canvas-frame.is-playing .special-button {
+    display: grid;
   }
 
   .shop-button {

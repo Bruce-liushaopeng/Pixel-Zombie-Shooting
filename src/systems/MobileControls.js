@@ -25,6 +25,7 @@ export class MobileControls {
     this.move = this.createState('move');
     this.aim = this.createState('aim');
     this.enabled = false;
+    this.gameplayActive = false;
     this.container = document.createElement('div');
     this.container.className = 'mobile-controls';
     this.container.setAttribute('aria-hidden', 'true');
@@ -71,11 +72,16 @@ export class MobileControls {
 
   updateEnabled() {
     this.enabled = this.visibilityQuery.matches || window.innerWidth <= 820;
-    this.container.classList.toggle('is-visible', this.enabled);
-    if (!this.enabled) {
+    this.container.classList.toggle('is-visible', this.enabled && this.gameplayActive);
+    if (!this.enabled || !this.gameplayActive) {
       this.resetStick(this.move);
       this.resetStick(this.aim);
     }
+  }
+
+  setGameplayActive(active) {
+    this.gameplayActive = Boolean(active);
+    this.updateEnabled();
   }
 
   setupStick(stick) {
@@ -88,7 +94,7 @@ export class MobileControls {
   }
 
   startStick(event, stick) {
-    if (!this.enabled || stick.pointerId !== null) return;
+    if (!this.enabled || !this.gameplayActive || stick.pointerId !== null) return;
     event.preventDefault();
     stick.pointerId = event.pointerId;
     stick.active = true;

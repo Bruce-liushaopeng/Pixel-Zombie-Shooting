@@ -121,8 +121,24 @@ function makeEvent(socket, room, eventType, payload = {}) {
   };
 }
 
-function createRoom({ roomCode, mode, difficulty, hostPlayerId }) {
+const MAP_NAMES = {
+  city: 'Abandoned City',
+  toxic_sewer: 'Toxic Sewer',
+  snow_outpost: 'Snow Outpost',
+};
+const MAP_THEMES = {
+  city: 'city',
+  toxic_sewer: 'sewer',
+  snow_outpost: 'frozen',
+};
+
+function normalizeMapId(mapId) {
+  return MAP_NAMES[mapId] ? mapId : 'city';
+}
+
+function createRoom({ roomCode, mode, difficulty, mapId, hostPlayerId }) {
   const now = nowIso();
+  const selectedMapId = normalizeMapId(mapId);
   return {
     roomCode,
     status: 'waiting',
@@ -131,6 +147,8 @@ function createRoom({ roomCode, mode, difficulty, hostPlayerId }) {
     gameState: {
       mode,
       difficulty,
+      mapId: selectedMapId,
+      mapName: MAP_NAMES[selectedMapId],
       currentWave: 1,
       seed: randomUUID(),
       players: {},
@@ -138,7 +156,7 @@ function createRoom({ roomCode, mode, difficulty, hostPlayerId }) {
       boss: null,
       bullets: [],
       pickups: [],
-      theme: 'city',
+      theme: MAP_THEMES[selectedMapId],
       status: 'waiting',
     },
     players: new Map(),
@@ -232,6 +250,7 @@ io.on('connection', (socket) => {
     const playerName = payload.playerName || 'Survivor';
     const mode = payload.mode === 'pvp' ? 'pvp' : 'coop';
     const difficulty = ['easy', 'medium', 'hard'].includes(payload.difficulty) ? payload.difficulty : 'medium';
+    const mapId = normalizeMapId(payload.mapId);
 
     if (!roomCode) {
       socket.emit('error_message', { message: 'Enter a room code.' });
@@ -240,7 +259,7 @@ io.on('connection', (socket) => {
 
     let room = rooms.get(roomCode);
     if (!room) {
-      room = createRoom({ roomCode, mode, difficulty, hostPlayerId: playerId });
+      room = createRoom({ roomCode, mode, difficulty, mapId, hostPlayerId: playerId });
       rooms.set(roomCode, room);
     }
 

@@ -25,6 +25,8 @@ import { LevelManager } from './LevelManager.js';
 import { SpecialAbilityManager } from './SpecialAbilityManager.js';
 import { ReviveManager } from './ReviveManager.js';
 import { themeForWave, THEMES } from './ThemeManager.js';
+import { MapManager } from './MapManager.js';
+import { getMapDefinition } from './MapDefinitions.js';
 
 export class Game {
   constructor({ canvas, hud, overlay }) {
@@ -36,6 +38,7 @@ export class Game {
     this.ui = new UI(hud, overlay);
     this.ui.onStart = (options) => this.start(options);
     this.ui.onMultiplayer = (options) => this.showMultiplayerMenu(options);
+    this.ui.onMapSelected = (options) => this.handleMapSelected(options);
     this.ui.onJoinRoom = (form) => this.joinMultiplayer(form);
     this.ui.onLeaveRoom = () => this.leaveRoom();
     this.ui.onOpenShop = () => this.openShop();
@@ -51,6 +54,8 @@ export class Game {
     this.mode = 'single';
     this.roomMode = 'single_player';
     this.difficultyId = 'medium';
+    this.mapManager = new MapManager('city');
+    this.mapId = 'city';
     this.multiplayerResultSaved = false;
     this.shopOpen = false;
     this.endMessage = '';
@@ -85,11 +90,13 @@ export class Game {
   }
 
   reset({ startWave = true } = {}) {
-    this.world = new World();
-    this.theme = themeForWave(1);
+    const selectedMap = this.mapManager.setMap(this.mapId);
+    this.world = new World(selectedMap.id);
+    this.theme = selectedMap.theme || themeForWave(1);
     this.world.setTheme(this.theme);
     this.camera = new Camera(this.canvas, this.world);
-    this.player = new Player(WORLD.width / 2, WORLD.height / 2);
+    const spawn = selectedMap.playerSpawns?.[0] || { x: WORLD.width / 2, y: WORLD.height / 2 };
+    this.player = new Player(spawn.x, spawn.y);
     this.frame = 0;
     this.enemies = [];
     this.bullets = [];
@@ -115,10 +122,11 @@ export class Game {
     if (startWave) this.nextWave();
   }
 
-  start({ difficulty = 'medium' } = {}) {
+  start({ difficulty = 'medium', mapId = this.mapId } = {}) {
     this.mode = 'single';
     this.roomMode = 'single_player';
     this.difficultyId = difficulty;
+    this.mapId = mapId || 'city';
     this.roomManager.unsubscribe();
     this.multiplayer.reset();
     this.audio.resume();
@@ -126,34 +134,46 @@ export class Game {
     this.setState(GAME_STATE.PLAYING);
   }
 
+  handleMapSelected({ mode = 'single', difficulty = 'medium', mapId = 'city' }) {
+    this.mapId = mapId;
+    if (mode === 'single') {
+      this.start({ difficulty, mapId });
+      return;
+    }
+    this.showMultiplayerMenu({ mode, difficulty, mapId });
+  }
+
   isMultiplayer() {
     return this.mode === 'multiplayer' && this.multiplayer.active;
   }
 
-  showMultiplayerMenu({ mode = 'coop', difficulty = 'medium', error = '' } = {}) {
+  showMultiplayerMenu({ mode = 'coop', difficulty = 'medium', mapId = this.mapId, error = '' } = {}) {
     this.mode = 'multiplayer';
     this.roomMode = mode;
     this.difficultyId = difficulty;
+    this.mapId = mapId || 'city';
     this.ui.renderMultiplayerMenu({
       playerName: this.roomManager.storedName(),
       mode,
       difficulty,
+      mapId: this.mapId,
       error: this.roomManager.hasClient() ? error : 'Missing Supabase env vars.',
     });
   }
 
-  async joinMultiplayer({ playerName, roomCode, mode = this.roomMode, difficulty = this.difficultyId }) {
+  async joinMultiplayer({ playerName, roomCode, mode = this.roomMode, difficulty = this.difficultyId, mapId = this.mapId }) {
     try {
-      this.ui.renderMultiplayerMenu({ playerName, roomCode, mode, difficulty, status: 'Connecting...' });
-      const session = await this.roomManager.joinOrCreateRoom({ playerName, roomCode, mode, difficulty });
+      this.ui.renderMultiplayerMenu({ playerName, roomCode, mode, difficulty, mapId, status: 'Connecting...' });
+      const session = await this.roomManager.joinOrCreateRoom({ playerName, roomCode, mode, difficulty, mapId });
       this.multiplayer.configure(session);
       this.roomMode = this.multiplayer.roomMode;
       this.difficultyId = this.multiplayer.difficulty;
+      this.mapId = session.room?.game_state?.mapId || this.multiplayer.mapId || mapId || 'city';
       this.subscribeToRoom();
       if (session.room.status === 'playing' || this.multiplayer.connectedPlayers().length >= 2) this.startMultiplayerGame();
       else this.renderWaitingRoom();
     } catch (error) {
-      this.showMultiplayerMenu({ mode, difficulty, error: error.message || 'Failed to join room.' });
+      this.showMultiplayerMenu({ mode, difficulty, mapId, error: error.message || 'Failed to join room.' });
     }
   }
 
@@ -165,7 +185,7 @@ export class Game {
       onSnapshot: (snapshot) => this.handleStateSnapshot(snapshot),
       onError: (message) => {
         this.multiplayer.statusMessage = message;
-        if (!this.multiplayer.active) this.showMultiplayerMenu({ mode: this.roomMode, difficulty: this.difficultyId, error: message });
+        if (!this.multiplayer.active) this.showMultiplayerMenu({ mode: this.roomMode, difficulty: this.difficultyId, mapId: this.mapId, error: message });
       },
     });
   }
@@ -210,6 +230,7 @@ export class Game {
     this.multiplayer.applyRoom(room);
     this.roomMode = this.multiplayer.roomMode;
     this.difficultyId = this.multiplayer.difficulty;
+    this.mapId = room?.game_state?.mapId || this.mapId;
     this.wave = room?.current_wave || this.wave;
     if (room?.status === 'playing' && this.state !== GAME_STATE.PLAYING) this.startMultiplayerGame();
     if (room?.status === 'ended' && this.state === GAME_STATE.PLAYING) this.setState(GAME_STATE.GAME_OVER);
@@ -227,9 +248,11 @@ export class Game {
     this.audio.resume();
     this.roomMode = this.multiplayer.roomMode;
     this.difficultyId = this.multiplayer.difficulty;
+    this.mapId = this.multiplayer.room?.game_state?.mapId || this.mapId;
     this.reset({ startWave: this.multiplayer.isHost });
-    this.player.x = WORLD.width / 2 + (this.multiplayer.localSlot === 1 ? -44 : 44);
-    this.player.y = WORLD.height / 2;
+    const spawn = getMapDefinition(this.mapId).playerSpawns?.[this.multiplayer.localSlot - 1] || { x: WORLD.width / 2 + (this.multiplayer.localSlot === 1 ? -44 : 44), y: WORLD.height / 2 };
+    this.player.x = spawn.x;
+    this.player.y = spawn.y;
     if (!this.multiplayer.isHost) {
       this.wave = this.multiplayer.room?.current_wave || 1;
       this.spawnQueue = 0;
@@ -244,12 +267,16 @@ export class Game {
     }
     this.mode = 'single';
     this.multiplayer.reset();
+    this.mapId = 'city';
     this.reset();
     this.setState(GAME_STATE.START);
   }
 
   setState(state) {
     this.state = state;
+    const gameplayActive = state === GAME_STATE.PLAYING && !this.shopOpen;
+    this.input.setGameplayActive?.(gameplayActive);
+    this.canvas.closest('.canvas-frame')?.classList.toggle('is-playing', gameplayActive);
     this.ui.renderOverlay(state, this);
   }
 
@@ -336,6 +363,8 @@ export class Game {
 
   openShop(message = '', tab = 'weapons') {
     this.shopOpen = true;
+    this.input.setGameplayActive?.(false);
+    this.canvas.closest('.canvas-frame')?.classList.remove('is-playing');
     if (!this.isMultiplayer()) this.state = GAME_STATE.PAUSED;
     this.ui.renderShop(this, message, tab);
   }
@@ -722,6 +751,8 @@ export class Game {
       wave: this.wave,
       mode: this.roomMode,
       difficulty: this.difficultyId,
+      mapId: this.mapId,
+      mapName: this.mapManager.current?.name || 'Abandoned City',
       spawnQueue: this.spawnQueue,
       theme: this.theme?.id || 'city',
       enemies: this.enemies.map((enemy) => ({
@@ -778,6 +809,12 @@ export class Game {
     if (payload.theme) this.setTheme(payload.theme);
     this.roomMode = payload.mode || this.roomMode;
     this.difficultyId = payload.difficulty || this.difficultyId;
+    if (payload.mapId && payload.mapId !== this.mapId) {
+      this.mapId = payload.mapId;
+      const selectedMap = this.mapManager.setMap(this.mapId);
+      this.world = new World(selectedMap.id);
+      this.world.setTheme(selectedMap.theme);
+    }
     this.spawnQueue = payload.spawnQueue || 0;
     this.enemies = (payload.enemies || []).map((data) => {
       const existing = this.enemies.find((enemy) => enemy.id === data.id);
@@ -872,11 +909,12 @@ export class Game {
     const heavy = pool.filter((type) => ['tank', 'shield', 'giant', 'heavyBrute', 'armored'].includes(type.id) || type.behavior === 'tank');
     const quick = pool.filter((type) => ['runner', 'fast', 'dodger', 'charger', 'leaper', 'swarm'].includes(type.id) || ['dodger', 'charger', 'swarm'].includes(type.behavior));
     const basic = pool.filter((type) => !ranged.includes(type) && !heavy.includes(type) && !quick.includes(type));
-    const rangedChance = this.difficultyId === 'hard' ? 0.24 : this.difficultyId === 'easy' ? 0.12 : 0.18;
-    const heavyChance = this.difficultyId === 'hard' ? 0.2 : this.difficultyId === 'easy' ? 0.1 : 0.15;
+    const bias = this.mapManager.current?.zombieBias || {};
+    const rangedChance = Math.max(0.04, (this.difficultyId === 'hard' ? 0.24 : this.difficultyId === 'easy' ? 0.12 : 0.18) + (bias.ranged || 0));
+    const heavyChance = Math.max(0.04, (this.difficultyId === 'hard' ? 0.2 : this.difficultyId === 'easy' ? 0.1 : 0.15) + (bias.heavy || 0));
     if (ranged.length && roll < rangedChance) return ranged[Math.floor(rand(0, ranged.length))].id;
     if (heavy.length && roll < rangedChance + heavyChance) return heavy[Math.floor(rand(0, heavy.length))].id;
-    if (quick.length && roll < 0.68) return quick[Math.floor(rand(0, quick.length))].id;
+    if (quick.length && roll < 0.68 + (bias.quick || 0)) return quick[Math.floor(rand(0, quick.length))].id;
     return (basic.length ? basic : pool)[Math.floor(rand(0, (basic.length ? basic : pool).length))].id;
   }
 
@@ -885,7 +923,7 @@ export class Game {
     this.wave += 1;
     this.bossSpawnedThisWave = false;
     const previousTheme = this.theme?.id;
-    this.setTheme(themeForWave(this.wave).id);
+    this.setTheme(this.mapId === 'city' ? themeForWave(this.wave).id : this.mapManager.current?.theme?.id);
     this.spawnQueue = Math.max(3, Math.round((5 + this.wave * 3 * this.difficulty().waveScale) * this.difficulty().spawnMultiplier));
     this.spawnTimer = 0.8;
     const themeChanged = previousTheme && previousTheme !== this.theme.id;

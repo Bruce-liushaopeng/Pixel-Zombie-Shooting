@@ -1,4 +1,5 @@
 import { ABILITIES, GAME_STATE } from '../game/constants.js';
+import { MAPS } from '../game/MapDefinitions.js';
 
 export class UI {
   constructor(hud, overlay) {
@@ -7,6 +8,7 @@ export class UI {
     this.lastHud = '';
     this.onStart = () => {};
     this.onMultiplayer = () => {};
+    this.onMapSelected = () => {};
     this.onJoinRoom = () => {};
     this.onLeaveRoom = () => {};
     this.onOpenShop = () => {};
@@ -20,6 +22,13 @@ export class UI {
   }
 
   renderHud(game) {
+    if (game.state !== GAME_STATE.PLAYING) {
+      if (this.lastHud) {
+        this.hud.innerHTML = '';
+        this.lastHud = '';
+      }
+      return;
+    }
     const healthPercent = Math.max(0, game.player.health / game.player.maxHealth) * 100;
     const level = game.levelManager?.progress(game.score) || { level: 1, earned: 0, next: 100, percent: 0 };
     const specialPercent = game.special?.percent() ?? 0;
@@ -159,21 +168,52 @@ export class UI {
       </div>
     `;
     const selectedDifficulty = () => this.overlay.querySelector('input[name="difficulty"]:checked')?.value || 'medium';
-    this.overlay.querySelector('[data-action="single-player"]').onclick = () => this.onStart({ difficulty: selectedDifficulty() });
-    this.overlay.querySelector('[data-action="coop"]').onclick = () => this.onMultiplayer({ mode: 'coop', difficulty: selectedDifficulty() });
-    this.overlay.querySelector('[data-action="pvp"]').onclick = () => this.onMultiplayer({ mode: 'pvp', difficulty: selectedDifficulty() });
+    this.overlay.querySelector('[data-action="single-player"]').onclick = () => this.renderMapSelect({ mode: 'single', difficulty: selectedDifficulty() });
+    this.overlay.querySelector('[data-action="coop"]').onclick = () => this.renderMapSelect({ mode: 'coop', difficulty: selectedDifficulty() });
+    this.overlay.querySelector('[data-action="pvp"]').onclick = () => this.renderMapSelect({ mode: 'pvp', difficulty: selectedDifficulty() });
   }
 
-  renderMultiplayerMenu({ playerName = '', roomCode = '', mode = 'coop', difficulty = 'medium', error = '', status = '' } = {}) {
+  renderMapSelect({ mode = 'single', difficulty = 'medium', selectedMapId = 'city' } = {}) {
+    this.overlay.classList.add('is-visible');
+    const title = mode === 'single' ? 'Choose Map' : `${mode === 'pvp' ? 'PvP' : 'Co-op'} Map`;
+    this.overlay.innerHTML = `
+      <div class="menu map-menu">
+        <p class="eyebrow">Deployment zone</p>
+        <h1>${title}</h1>
+        <p>Pick the battlefield before the run starts.</p>
+        <div class="map-grid">
+          ${MAPS.map((map) => `
+            <button class="map-card ${map.id === selectedMapId ? 'is-selected' : ''}" type="button" data-map="${this.escape(map.id)}">
+              <span class="map-preview" style="--c1:${map.preview[0]};--c2:${map.preview[1]};--c3:${map.preview[2]};--c4:${map.preview[3]}"></span>
+              <b>${this.escape(map.name)}</b>
+              <span>${this.escape(map.description)}</span>
+              <em>${this.escape(map.flavor)}</em>
+            </button>
+          `).join('')}
+        </div>
+        <div class="menu-actions">
+          <button class="pixel-button secondary" type="button" data-action="back">Back</button>
+        </div>
+      </div>
+    `;
+    this.overlay.querySelectorAll('[data-map]').forEach((button) => {
+      button.onclick = () => this.onMapSelected({ mode, difficulty, mapId: button.dataset.map });
+    });
+    this.overlay.querySelector('[data-action="back"]').onclick = () => this.renderOverlay(GAME_STATE.START, { score: 0, wave: 0 });
+  }
+
+  renderMultiplayerMenu({ playerName = '', roomCode = '', mode = 'coop', difficulty = 'medium', mapId = 'city', error = '', status = '' } = {}) {
+    const map = MAPS.find((candidate) => candidate.id === mapId) || MAPS[0];
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
       <div class="menu multiplayer-menu">
         <p class="eyebrow">Socket.IO realtime</p>
         <h1>${mode === 'pvp' ? 'PvP Room' : 'Co-op Room'}</h1>
-        <p>Join or create a two-player room. Mode: ${this.escape(mode.toUpperCase())}. Difficulty: ${this.escape(difficulty)}.</p>
+        <p>Join or create a two-player room. Mode: ${this.escape(mode.toUpperCase())}. Difficulty: ${this.escape(difficulty)}. Map: ${this.escape(map.name)}.</p>
         <form class="multiplayer-form">
           <input type="hidden" name="mode" value="${this.escape(mode)}" />
           <input type="hidden" name="difficulty" value="${this.escape(difficulty)}" />
+          <input type="hidden" name="mapId" value="${this.escape(map.id)}" />
           <label>
             <span>Player name</span>
             <input name="playerName" maxlength="18" autocomplete="nickname" value="${this.escape(playerName)}" placeholder="Survivor" />
@@ -200,6 +240,7 @@ export class UI {
         roomCode: data.get('roomCode'),
         mode: data.get('mode'),
         difficulty: data.get('difficulty'),
+        mapId: data.get('mapId'),
       });
     };
     this.overlay.querySelector('[data-action="back"]').onclick = () => this.renderOverlay(GAME_STATE.START, { score: 0, wave: 0 });
@@ -213,7 +254,7 @@ export class UI {
       <div class="menu multiplayer-menu">
         <p class="eyebrow">Waiting room</p>
         <h1>${this.escape(room.room_code)}</h1>
-        <p class="status-copy">Mode ${this.escape(room.game_state?.mode || 'coop')} / ${this.escape(room.game_state?.difficulty || 'medium')}</p>
+        <p class="status-copy">Mode ${this.escape(room.game_state?.mode || 'coop')} / ${this.escape(room.game_state?.difficulty || 'medium')} / Map ${this.escape(room.game_state?.mapName || room.game_state?.mapId || 'city')}</p>
         <div class="room-list">
           <div class="room-player player-1"><b>Player 1</b><span>${this.escape(player1?.player_name || 'Open')}</span></div>
           <div class="room-player player-2"><b>Player 2</b><span>${this.escape(player2?.player_name || 'Waiting for second player...')}</span></div>
