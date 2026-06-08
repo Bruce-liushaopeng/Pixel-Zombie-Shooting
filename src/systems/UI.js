@@ -15,6 +15,8 @@ export class UI {
     this.onCloseShop = () => {};
     this.onBuyWeapon = () => {};
     this.onBuyHealth = () => {};
+    this.onBuyArmor = () => {};
+    this.onBuyUpgrade = () => {};
     this.onSpecial = () => {};
     this.onAudioToggle = () => {};
     this.onRestart = () => {};
@@ -51,6 +53,7 @@ export class UI {
       <div class="hud-row">
         <div class="hud-group hud-left">
           <div class="meter"><span style="width:${healthPercent}%"></span><p>HP ${Math.ceil(game.player.health)}/${game.player.maxHealth}</p></div>
+          ${game.player.armor > 0 ? `<div class="stat stat-armor">Armor <b>${Math.ceil(game.player.armor)}</b></div>` : ''}
           <div class="stat stat-level">Lv <b>${level.level}</b> <span>${game.score}/${level.next}</span></div>
         </div>
         <div class="hud-group hud-center">
@@ -91,6 +94,7 @@ export class UI {
         const isLocal = player.player_id === game.multiplayer.localPlayerId;
         const remote = game.multiplayer.remotePlayers.get(player.player_id);
         const health = isLocal ? game.player.health : remote?.health ?? player.health ?? 100;
+        const armor = isLocal ? game.player.armor || 0 : remote?.armor ?? 0;
         const score = isLocal ? game.score : remote?.score ?? player.score ?? 0;
         const money = isLocal ? game.money : remote?.money ?? 0;
         const revive = isLocal && game.revive?.isDowned
@@ -98,7 +102,7 @@ export class UI {
           : remote?.isDowned
             ? ` Down ${Math.ceil(remote.reviveTimer)}s`
             : '';
-        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)} Lv ${isLocal ? game.levelManager.level : remote?.level || 1} Score ${score} $${money}${revive}</span>`;
+        return `<span class="player-stat player-${player.player_slot || 1}">${isLocal ? 'You' : player.player_name}: HP ${Math.ceil(health)}${armor ? ` AR ${Math.ceil(armor)}` : ''} Lv ${isLocal ? game.levelManager.level : remote?.level || 1} Score ${score} $${money}${revive}</span>`;
       })
       .join('');
     const status = game.multiplayer.statusMessage
@@ -269,13 +273,39 @@ export class UI {
 
   renderShop(game, message = '', tab = 'weapons') {
     const weapons = game.weaponManager.list();
-    const damageBonus = game.levelManager?.damageBonus() || 0;
-    const activeTab = tab === 'health' ? 'health' : 'weapons';
+    const damageBonus = (game.levelManager?.damageBonus() || 0) + (game.player?.permanentDamageBonus || 0);
+    const activeTab = ['weapons', 'health', 'abilities'].includes(tab) ? tab : 'weapons';
     const missingHp = Math.max(0, game.player.maxHealth - game.player.health);
+    const missingArmor = Math.max(0, (game.player.maxArmor || 100) - (game.player.armor || 0));
     const healthItems = [
-      { label: '+25 HP', amount: 25, cost: 40 },
-      { label: '+50 HP', amount: 50, cost: 75 },
-      { label: 'Full Heal', amount: game.player.maxHealth, cost: 120 },
+      { label: '+25 HP', amount: 25, cost: 55 },
+      { label: '+50 HP', amount: 50, cost: 90 },
+      { label: 'Full Heal', amount: game.player.maxHealth, cost: 135 },
+    ];
+    const armorItems = [
+      { label: '+25 Armor', amount: 25, cost: 50 },
+      { label: '+50 Armor', amount: 50, cost: 85 },
+      { label: 'Full Armor', amount: game.player.maxArmor || 100, cost: 130 },
+    ];
+    const upgrades = [
+      {
+        id: 'damage',
+        title: 'Damage Training',
+        description: 'Permanently adds +1 bullet damage for this run. Capped so weapons stay balanced.',
+        price: 200,
+        level: game.abilityPurchases?.damage || 0,
+        max: 8,
+        current: `+${game.player?.permanentDamageBonus || 0} damage`,
+      },
+      {
+        id: 'speed',
+        title: 'Footwork Drill',
+        description: 'Permanently increases movement speed by 4% for this run. Stacks up to +20%.',
+        price: 200,
+        level: game.abilityPurchases?.speed || 0,
+        max: 5,
+        current: `+${Math.round((game.player?.permanentSpeedBonus || 0) * 100)}% speed`,
+      },
     ];
     this.overlay.classList.add('is-visible');
     this.overlay.innerHTML = `
@@ -287,6 +317,7 @@ export class UI {
         <div class="shop-tabs" role="tablist" aria-label="Shop tabs">
           <button class="${activeTab === 'weapons' ? 'is-active' : ''}" type="button" data-shop-tab="weapons">Weapons</button>
           <button class="${activeTab === 'health' ? 'is-active' : ''}" type="button" data-shop-tab="health">HP Back</button>
+          <button class="${activeTab === 'abilities' ? 'is-active' : ''}" type="button" data-shop-tab="abilities">Ability</button>
         </div>
         ${activeTab === 'weapons' ? `
           <div class="shop-grid">
@@ -307,7 +338,8 @@ export class UI {
               </article>
             `).join('')}
           </div>
-        ` : `
+        ` : activeTab === 'health' ? `
+          <p class="shop-section-copy">HP is direct healing. Armor is a cheaper damage buffer and absorbs part of incoming hits before HP.</p>
           <div class="shop-grid health-grid">
             ${healthItems.map((item) => `
               <article class="weapon-card health-card">
@@ -322,6 +354,40 @@ export class UI {
                 </button>
               </article>
             `).join('')}
+            ${armorItems.map((item) => `
+              <article class="weapon-card armor-card">
+                <h2>${this.escape(item.label)}</h2>
+                <p>Add armor plating during a run. Current armor: ${Math.ceil(game.player.armor || 0)}/${game.player.maxArmor || 100}.</p>
+                <dl>
+                  <div><dt>Price</dt><dd>${item.cost}</dd></div>
+                  <div><dt>Armor</dt><dd>${Math.min(item.amount, Math.ceil(missingArmor))}</dd></div>
+                </dl>
+                <button class="pixel-button ${game.money < item.cost || missingArmor <= 0 ? 'secondary' : ''}" type="button" data-armor-amount="${item.amount}" data-armor-cost="${item.cost}">
+                  Buy Armor
+                </button>
+              </article>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="shop-grid ability-upgrade-grid">
+            ${upgrades.map((upgrade) => {
+              const maxed = upgrade.level >= upgrade.max;
+              return `
+                <article class="weapon-card ability-upgrade-card ${maxed ? 'is-equipped' : ''}">
+                  <h2>${this.escape(upgrade.title)}</h2>
+                  <p>${this.escape(upgrade.description)}</p>
+                  <dl>
+                    <div><dt>Price</dt><dd>${upgrade.price}</dd></div>
+                    <div><dt>Level</dt><dd>${upgrade.level}/${upgrade.max}</dd></div>
+                    <div><dt>Current</dt><dd>${this.escape(upgrade.current)}</dd></div>
+                    <div><dt>Type</dt><dd>Permanent</dd></div>
+                  </dl>
+                  <button class="pixel-button ${game.money < upgrade.price || maxed ? 'secondary' : ''}" type="button" data-upgrade="${upgrade.id}">
+                    ${maxed ? 'Maxed' : 'Buy Upgrade'}
+                  </button>
+                </article>
+              `;
+            }).join('')}
           </div>
         `}
         ${message ? `<p class="${message.includes('Not enough') ? 'error-copy' : 'status-copy'}">${this.escape(message)}</p>` : ''}
@@ -336,6 +402,12 @@ export class UI {
     });
     this.overlay.querySelectorAll('[data-health-amount]').forEach((button) => {
       button.onclick = () => this.onBuyHealth(Number(button.dataset.healthAmount), Number(button.dataset.healthCost));
+    });
+    this.overlay.querySelectorAll('[data-armor-amount]').forEach((button) => {
+      button.onclick = () => this.onBuyArmor(Number(button.dataset.armorAmount), Number(button.dataset.armorCost));
+    });
+    this.overlay.querySelectorAll('[data-upgrade]').forEach((button) => {
+      button.onclick = () => this.onBuyUpgrade(button.dataset.upgrade);
     });
     this.overlay.querySelectorAll('[data-action="close-shop"]').forEach((button) => {
       button.onclick = () => this.onCloseShop();

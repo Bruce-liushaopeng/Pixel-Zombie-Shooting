@@ -13,6 +13,7 @@ export class RemotePlayerState {
     this.health = Number(row.health ?? 100);
     this.score = Number(row.score || 0);
     this.money = 0;
+    this.armor = Number(row.armor || 0);
     this.weapon = 'pistol';
     this.ammo = '∞';
     this.isDowned = false;
@@ -33,6 +34,7 @@ export class RemotePlayerState {
     this.angle = Number(row.angle ?? this.angle);
     this.health = Number(row.health ?? this.health);
     this.score = Number(row.score ?? this.score);
+    this.armor = Number(row.armor ?? this.armor);
     this.lastSeenAt = row.last_seen_at;
   }
 
@@ -128,12 +130,13 @@ export class MultiplayerState {
     this.remotePlayers.forEach((player) => player.update(dt));
   }
 
-  applyEconomy({ playerId, score, money, weapon, ammo, weaponPurchases, level, specialCharge, isDowned, reviveTimer }) {
+  applyEconomy({ playerId, score, money, armor, weapon, ammo, weaponPurchases, level, specialCharge, isDowned, reviveTimer }) {
     if (playerId === this.localPlayerId) return;
     const remote = this.remotePlayers.get(playerId);
     if (!remote) return;
     remote.score = Number(score ?? remote.score);
     remote.money = Number(money ?? remote.money);
+    remote.armor = Number(armor ?? remote.armor);
     remote.weapon = weapon || remote.weapon;
     remote.ammo = ammo ?? remote.ammo;
     remote.weaponPurchases = Number(weaponPurchases ?? remote.weaponPurchases ?? 0);

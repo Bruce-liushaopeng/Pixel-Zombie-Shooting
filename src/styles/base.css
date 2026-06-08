@@ -542,6 +542,17 @@ h1 {
   border-color: #7bed9f;
 }
 
+.armor-card {
+  border-color: #9ee7ff;
+}
+
+.shop-section-copy {
+  margin: 14px auto 0;
+  color: #c8d1d8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .weapon-card h2 {
   margin: 0;
   color: #fff6d1;

@@ -28,6 +28,11 @@ import { themeForWave, THEMES } from './ThemeManager.js';
 import { MapManager } from './MapManager.js';
 import { getMapDefinition } from './MapDefinitions.js';
 
+const SHOP_UPGRADES = {
+  damage: { cost: 200, max: 8, amount: 1 },
+  speed: { cost: 200, max: 5, amount: 0.04 },
+};
+
 export class Game {
   constructor({ canvas, hud, overlay }) {
     this.canvas = canvas;
@@ -45,6 +50,8 @@ export class Game {
     this.ui.onCloseShop = () => this.closeShop();
     this.ui.onBuyWeapon = (weaponId) => this.buyWeapon(weaponId);
     this.ui.onBuyHealth = (amount, cost) => this.buyHealth(amount, cost);
+    this.ui.onBuyArmor = (amount, cost) => this.buyArmor(amount, cost);
+    this.ui.onBuyUpgrade = (upgradeId) => this.buyAbilityUpgrade(upgradeId);
     this.ui.onSpecial = () => this.useSpecial();
     this.ui.onAudioToggle = () => this.toggleAudio();
     this.ui.onRestart = () => this.start();
@@ -107,6 +114,7 @@ export class Game {
     this.money = 0;
     this.zombiesKilled = 0;
     this.weaponPurchases = 0;
+    this.abilityPurchases = { damage: 0, speed: 0 };
     this.levelManager = new LevelManager();
     this.special = new SpecialAbilityManager();
     this.revive = new ReviveManager();
@@ -296,7 +304,8 @@ export class Game {
 
   gameOverSummary() {
     const result = this.endMessage ? `${this.endMessage} ` : '';
-    return `${result}Final Score ${this.score}. Money Remaining $${this.money}. Zombies Killed ${this.zombiesKilled}. Waves Survived ${this.wave}. Weapon Purchases ${this.weaponPurchases}.`;
+    const upgrades = this.abilityPurchases.damage + this.abilityPurchases.speed;
+    return `${result}Final Score ${this.score}. Money Remaining $${this.money}. Zombies Killed ${this.zombiesKilled}. Waves Survived ${this.wave}. Weapon Purchases ${this.weaponPurchases}. Ability Upgrades ${upgrades}.`;
   }
 
   toggleAudio() {
@@ -350,6 +359,7 @@ export class Game {
         playerId: this.multiplayer.localPlayerId,
         score: this.score,
         money: this.money,
+        armor: this.player.armor || 0,
         weapon: this.weaponManager.current().id,
         ammo: this.weaponAmmoLabel(),
         weaponPurchases: this.weaponPurchases,
@@ -400,6 +410,50 @@ export class Game {
     this.addFloatingText(`+${Math.ceil(healed)} HP`, this.player.x, this.player.y - 42, '#7bed9f');
     this.audio.pickup();
     this.ui.renderShop(this, `Recovered ${Math.ceil(healed)} HP.`, 'health');
+  }
+
+  buyArmor(amount, cost) {
+    if (this.player.armor >= this.player.maxArmor) {
+      this.ui.renderShop(this, 'Armor is already full.', 'health');
+      return;
+    }
+    if (this.money < cost) {
+      this.ui.renderShop(this, 'Not enough money.', 'health');
+      return;
+    }
+    const armored = Math.min(amount, this.player.maxArmor - this.player.armor);
+    this.money -= cost;
+    this.player.armor = Math.min(this.player.maxArmor, this.player.armor + armored);
+    this.broadcastEconomy();
+    this.addFloatingText(`+${Math.ceil(armored)} ARMOR`, this.player.x, this.player.y - 42, '#9ee7ff');
+    this.audio.pickup();
+    this.ui.renderShop(this, `Added ${Math.ceil(armored)} armor.`, 'health');
+  }
+
+  buyAbilityUpgrade(upgradeId) {
+    const upgrade = SHOP_UPGRADES[upgradeId];
+    if (!upgrade) return;
+    const current = this.abilityPurchases[upgradeId] || 0;
+    if (current >= upgrade.max) {
+      this.ui.renderShop(this, 'Upgrade is already maxed.', 'abilities');
+      return;
+    }
+    if (this.money < upgrade.cost) {
+      this.ui.renderShop(this, 'Not enough money.', 'abilities');
+      return;
+    }
+    this.money -= upgrade.cost;
+    this.abilityPurchases[upgradeId] = current + 1;
+    if (upgradeId === 'damage') {
+      this.player.permanentDamageBonus += upgrade.amount;
+      this.addFloatingText(`Permanent damage +${upgrade.amount}`, this.player.x, this.player.y - 52, '#ef476f');
+    } else if (upgradeId === 'speed') {
+      this.player.permanentSpeedBonus = Math.min(upgrade.amount * upgrade.max, this.player.permanentSpeedBonus + upgrade.amount);
+      this.addFloatingText(`Move speed +${Math.round(upgrade.amount * 100)}%`, this.player.x, this.player.y - 52, '#4cc9a7');
+    }
+    this.audio.pickup();
+    this.broadcastEconomy();
+    this.ui.renderShop(this, 'Permanent run upgrade purchased.', 'abilities');
   }
 
   useSpecial() {
@@ -729,6 +783,7 @@ export class Game {
         y: this.player.y,
         angle: this.player.angle,
         health: Math.max(0, Math.ceil(this.player.health)),
+        armor: Math.max(0, Math.ceil(this.player.armor || 0)),
         score: this.score,
       });
     }

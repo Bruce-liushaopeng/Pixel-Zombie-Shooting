@@ -11,11 +11,16 @@ export class Player extends Entity {
     this.fireDelay = 0.22;
     this.abilities = new Map();
     this.hurtCooldown = 0;
+    this.permanentDamageBonus = 0;
+    this.permanentSpeedBonus = 0;
+    this.armor = 0;
+    this.maxArmor = 100;
   }
 
   update(dt, input, aimWorld, world) {
     const move = input.movementVector();
-    const speed = this.hasAbility('speed') ? this.speed * 1.45 : this.speed;
+    const permanentSpeed = this.speed * (1 + this.permanentSpeedBonus);
+    const speed = this.hasAbility('speed') ? permanentSpeed * 1.45 : permanentSpeed;
     this.x += move.x * speed * dt;
     this.y += move.y * speed * dt;
     resolveWorldCollisions(this, world);
@@ -52,7 +57,7 @@ export class Player extends Entity {
       vx: dir.x * (weapon?.speed || 720),
       vy: dir.y * (weapon?.speed || 720),
       r: weapon?.radius || (this.hasAbility('big') ? 8 : 5),
-      damage: this.hasAbility('damage') ? Math.round((weapon?.damage || 16) * 1.75) : (weapon?.damage || 16),
+      damage: this.hasAbility('damage') ? Math.round(((weapon?.damage || 16) + this.permanentDamageBonus) * 1.75) : ((weapon?.damage || 16) + this.permanentDamageBonus),
       friendly: true,
       weaponType: weapon?.id || 'pistol',
       color: weapon?.color,
@@ -62,7 +67,14 @@ export class Player extends Entity {
 
   hurt(amount) {
     if (this.hurtCooldown > 0 || this.hasAbility('shield') || this.hasAbility('invincible')) return false;
-    this.damage(amount);
+    let remaining = amount;
+    if (this.armor > 0) {
+      const absorbed = Math.min(this.armor, Math.ceil(remaining * 0.8));
+      this.armor -= absorbed;
+      remaining = Math.max(0, remaining - absorbed);
+      this.flash = 0.12;
+    }
+    if (remaining > 0) this.damage(remaining);
     this.hurtCooldown = 0.45;
     return true;
   }
