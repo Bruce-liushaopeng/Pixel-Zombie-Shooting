@@ -479,10 +479,10 @@ export class Game {
     return Object.values(TOWER_TIERS).map((tower) => ({
       ...tower,
       description: tower.id === 'barricade'
-        ? 'Budget tower with solid HP and steady close defense.'
+        ? 'Budget tower with steady close defense.'
         : tower.id === 'sentry'
-          ? 'Better range, HP, and firepower for mid-wave defense.'
-          : 'Expensive durable tower with strong coverage, but still destructible.',
+          ? 'Better range, firepower, and light splash damage for mid-wave defense.'
+          : 'Expensive tower with strong coverage and heavier group damage.',
     }));
   }
 
@@ -997,9 +997,6 @@ export class Game {
         if (remote.isConnected && remote.health > 0 && !(ignoreShoppingTargets && remote.isShopping)) candidates.push({ ...remote, isLocal: false });
       }
     }
-    for (const tower of this.towers) {
-      if (!tower.dead && tower.health > 0) candidates.push({ ...tower, isLocal: false, isTower: true, towerRef: tower });
-    }
     return candidates
       .filter((player) => player.health > 0)
       .sort((a, b) => distance(from, a) - distance(from, b))[0] || null;
@@ -1132,24 +1129,11 @@ export class Game {
       if (bullet.friendly) {
         for (const enemy of this.enemies) {
           if (enemy.dead || distance(bullet, enemy) > bullet.r + enemy.r) continue;
-          const damage = this.damageForHit(bullet, enemy);
-          enemy.damage(damage);
+          this.applyFriendlyBulletHit(bullet, enemy);
           bullet.dead = true;
           this.burst(bullet.x, bullet.y, '#ffe66d', 5);
-          this.addFloatingText(`-${damage}`, enemy.x, enemy.y - 20, '#fff6d1');
-          this.addSpecialChargeForHit(bullet, enemy);
-          if (this.isMultiplayer() && this.multiplayer.isHost) {
-            this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_HIT, nowPayload({
-              zombieId: enemy.id,
-              damage,
-              shooterPlayerId: bullet.ownerId || this.multiplayer.localPlayerId,
-            }));
-          }
-          if (enemy.dead) this.killEnemy(enemy, bullet.ownerId);
           break;
         }
-      } else if (this.hitTowerWithEnemyBullet(bullet)) {
-        continue;
       } else if (distance(bullet, this.player) < bullet.r + this.player.r) {
         bullet.dead = true;
         if (this.player.hurt(bullet.damage)) {
@@ -1184,23 +1168,13 @@ export class Game {
 
   hitTowerWithEnemyBullet(bullet) {
     if (bullet.friendly) return false;
-    const tower = this.towers.find((candidate) => !candidate.dead && distance(bullet, candidate) < bullet.r + candidate.r);
-    if (!tower) return false;
-    bullet.dead = true;
-    this.damageTower(tower, bullet.damage);
-    this.burst(bullet.x, bullet.y, tower.color, 5);
-    this.addFloatingText(`-${bullet.damage}`, tower.x, tower.y - 36, '#9ee7ff');
-    return true;
+    return false;
   }
 
   damageTower(tower, amount) {
     if (!tower || tower.dead) return;
-    if (typeof tower.damage === 'function') tower.damage(amount);
-    else {
-      tower.health -= amount;
-      tower.flash = 0.12;
-      if (tower.health <= 0) tower.dead = true;
-    }
+    tower.health = tower.maxHealth;
+    tower.flash = 0;
   }
 
   updateTowers(dt) {
@@ -1215,6 +1189,30 @@ export class Game {
     if (bullet.weaponType === 'shotgun') this.special.addCharge(0.01);
     else if (bullet.weaponType === 'rocket') this.special.addCharge(0.08);
     else this.special.addCharge(enemy.typeId?.includes('boss') || enemy.isBoss ? 0.02 : 0.03);
+  }
+
+  applyFriendlyBulletHit(bullet, directTarget) {
+    const area = Number(bullet.area || 0);
+    const targets = area > 0
+      ? this.enemies.filter((enemy) => !enemy.dead && distance(bullet, enemy) <= area + enemy.r)
+      : [directTarget];
+
+    for (const enemy of targets) {
+      const isDirectHit = enemy === directTarget;
+      const baseDamage = this.damageForHit(bullet, enemy);
+      const damage = isDirectHit ? baseDamage : Math.max(1, Math.round(baseDamage * 0.65));
+      enemy.damage(damage);
+      this.addFloatingText(`-${damage}`, enemy.x, enemy.y - 20, isDirectHit ? '#fff6d1' : '#b38cff');
+      this.addSpecialChargeForHit(bullet, enemy);
+      if (this.isMultiplayer() && this.multiplayer.isHost) {
+        this.roomManager.insertEvent(this.multiplayer.room.id, NETWORK_EVENTS.ZOMBIE_HIT, nowPayload({
+          zombieId: enemy.id,
+          damage,
+          shooterPlayerId: bullet.ownerId || this.multiplayer.localPlayerId,
+        }));
+      }
+      if (enemy.dead) this.killEnemy(enemy, bullet.ownerId);
+    }
   }
 
   damageForHit(bullet, target) {

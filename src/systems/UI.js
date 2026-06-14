@@ -303,7 +303,7 @@ export class UI {
                 <dl>
                   <div><dt>Price</dt><dd>${weapon.price}</dd></div>
                   <div><dt>Damage</dt><dd>${weapon.damage}${damageBonus ? ` +${damageBonus}` : ''}${weapon.pellets > 1 ? ` x${weapon.pellets}` : ''}</dd></div>
-                  <div><dt>Fire</dt><dd>${Math.round(1000 / weapon.fireDelay)}/s</dd></div>
+                  <div><dt>Fire</dt><dd>${(1 / weapon.fireDelay).toFixed(1)}/s</dd></div>
                   <div><dt>Ammo</dt><dd>${weapon.purchaseAmmo === Infinity ? '∞' : weapon.purchaseAmmo}</dd></div>
                 </dl>
                 <p class="ammo-copy">Owned: ${weapon.ownedAmmo === Infinity ? '∞' : weapon.ownedAmmo}</p>
@@ -365,7 +365,7 @@ export class UI {
             }).join('')}
           </div>
         ` : `
-          <p class="shop-section-copy">Towers deploy at your current position, draw zombie attention, and shoot nearby enemies. Zombies can destroy them.</p>
+          <p class="shop-section-copy">Towers deploy at your current position and shoot nearby enemies. Zombies ignore them, and higher tier towers deal splash damage.</p>
           <div class="shop-grid tower-grid">
             ${towers.map((tower) => `
               <article class="weapon-card tower-card">
@@ -376,6 +376,7 @@ export class UI {
                   <div><dt>HP</dt><dd>${tower.health}</dd></div>
                   <div><dt>Damage</dt><dd>${tower.damage}</dd></div>
                   <div><dt>Range</dt><dd>${tower.range}</dd></div>
+                  ${tower.area ? `<div><dt>Splash</dt><dd>${tower.area}</dd></div>` : ''}
                 </dl>
                 <button class="pixel-button ${game.money < tower.price ? 'secondary' : ''}" type="button" data-tower="${tower.id}">
                   Build Tower

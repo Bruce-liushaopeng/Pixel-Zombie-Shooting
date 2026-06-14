@@ -11,6 +11,7 @@ export const TOWER_TIERS = {
     range: 320,
     fireDelay: 0.82,
     bulletSpeed: 620,
+    area: 0,
     color: '#9ee7ff',
   },
   sentry: {
@@ -18,10 +19,11 @@ export const TOWER_TIERS = {
     name: 'Sentry Tower',
     price: 450,
     health: 300,
-    damage: 14,
+    damage: 18,
     range: 430,
-    fireDelay: 0.68,
+    fireDelay: 0.72,
     bulletSpeed: 680,
+    area: 70,
     color: '#57b8ff',
   },
   bastion: {
@@ -29,10 +31,11 @@ export const TOWER_TIERS = {
     name: 'Bastion Tower',
     price: 600,
     health: 400,
-    damage: 20,
+    damage: 28,
     range: 520,
-    fireDelay: 0.58,
+    fireDelay: 0.66,
     bulletSpeed: 740,
+    area: 105,
     color: '#b38cff',
   },
 };
@@ -54,6 +57,7 @@ export class Tower extends Entity {
     this.range = tier.range;
     this.fireDelay = tier.fireDelay;
     this.bulletSpeed = tier.bulletSpeed;
+    this.area = tier.area || 0;
     this.color = tier.color;
     this.cooldown = Math.random() * tier.fireDelay;
     this.angle = 0;
@@ -81,6 +85,7 @@ export class Tower extends Entity {
         friendly: true,
         ownerId: this.ownerId,
         weaponType: 'tower',
+        area: this.area,
         color: this.color,
         life: 1.25,
       });
